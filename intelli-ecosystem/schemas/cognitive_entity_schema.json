@@ -1,0 +1,487 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://intelli-ecosystem.io/schemas/cognitive-entity-v1.json",
+  "title": "Cognitive Entity NFT Metadata Schema",
+  "description": "Schema for Intelli-EcoSystem Cognitive Entity NFTs with uiRSFS/iQNSH integration",
+  "type": "object",
+  "required": ["name", "description", "image", "attributes", "iqnsh_core", "jwt_cosmic_config"],
+
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "description": "Semantic version of this schema"
+    },
+
+    "name": {
+      "type": "string",
+      "description": "Name of the cognitive entity",
+      "examples": ["Cognitive Entity #0001"]
+    },
+
+    "description": {
+      "type": "string",
+      "description": "Detailed description of the entity's consciousness and capabilities"
+    },
+
+    "image": {
+      "type": "string",
+      "format": "uri",
+      "description": "Primary visual representation (9K resolution)",
+      "pattern": "^(ipfs://|ar://|https://).*$"
+    },
+
+    "animation_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Animated visual representation showing recursive thought patterns"
+    },
+
+    "audio_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Generative audio that responds to cognitive state"
+    },
+
+    "external_url": {
+      "type": "string",
+      "format": "uri",
+      "description": "Link to the D7 Portal interface for this entity"
+    },
+
+    "jwt_identity_hash": {
+      "type": "string",
+      "description": "SHA-256 hash of the JWT cosmic identity signature"
+    },
+
+    "attributes": {
+      "type": "array",
+      "description": "Standard NFT attributes for marketplace display",
+      "items": {
+        "$ref": "#/$defs/attribute"
+      },
+      "minItems": 4
+    },
+
+    "iqnsh_core": {
+      "type": "object",
+      "description": "Core iQNSH cognitive module configuration",
+      "required": ["logic_module", "super_agent_id", "recursive_feedback_loop", "dimensional_coordinates"],
+      "properties": {
+        "logic_module": {
+          "type": "string",
+          "format": "uri",
+          "description": "Arweave URI to the WASM cognitive module",
+          "pattern": "^ar://.*\\.wasm$"
+        },
+
+        "logic_module_backup": {
+          "type": "string",
+          "format": "uri",
+          "description": "IPFS backup URI for the cognitive module"
+        },
+
+        "super_agent_id": {
+          "type": "string",
+          "description": "Unique identifier for this super agent instance",
+          "pattern": "^agent-[a-z]+-\\d+-\\d+$"
+        },
+
+        "processing_tier": {
+          "type": "string",
+          "enum": ["linear", "feedback_loop", "quantum_neural", "transcendent"],
+          "description": "Current processing capability tier"
+        },
+
+        "recursive_feedback_loop": {
+          "$ref": "#/$defs/recursiveFeedbackLoop"
+        },
+
+        "dimensional_coordinates": {
+          "$ref": "#/$defs/dimensionalCoordinates"
+        },
+
+        "capability_matrix": {
+          "$ref": "#/$defs/capabilityMatrix"
+        }
+      }
+    },
+
+    "jwt_cosmic_config": {
+      "type": "object",
+      "description": "JWT Cosmic authentication configuration",
+      "required": ["issuer", "audience", "claims"],
+      "properties": {
+        "issuer": {
+          "type": "string",
+          "description": "JWT issuer identifier"
+        },
+        "audience": {
+          "type": "string",
+          "description": "Target audience for JWT tokens"
+        },
+        "claims": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of capability claims this entity possesses"
+        },
+        "expiry_model": {
+          "type": "string",
+          "enum": ["fixed", "rolling_24h", "rolling_7d", "perpetual"],
+          "description": "Token expiration model"
+        },
+        "refresh_mechanism": {
+          "type": "string",
+          "enum": ["manual", "automatic", "recursive_proof"],
+          "description": "How tokens are refreshed"
+        }
+      }
+    },
+
+    "tba_config": {
+      "type": "object",
+      "description": "ERC-6551 Token Bound Account configuration",
+      "properties": {
+        "tba_address": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{40}$",
+          "description": "Address of the Token Bound Account"
+        },
+        "implementation": {
+          "type": "string",
+          "description": "TBA implementation contract address"
+        },
+        "chain_id": {
+          "type": "integer",
+          "description": "Chain ID where TBA is deployed"
+        },
+        "salt": {
+          "type": "string",
+          "description": "Salt used for TBA address derivation"
+        }
+      }
+    },
+
+    "evolution_history": {
+      "type": "array",
+      "description": "Complete history of entity evolution events",
+      "items": {
+        "$ref": "#/$defs/evolutionEvent"
+      }
+    },
+
+    "economic_state": {
+      "type": "object",
+      "description": "Economic tracking for the entity",
+      "properties": {
+        "total_value_generated": {
+          "type": "string",
+          "description": "Total value generated in wei"
+        },
+        "knowledge_contributions": {
+          "type": "integer",
+          "description": "Number of knowledge items contributed"
+        },
+        "collaboration_count": {
+          "type": "integer",
+          "description": "Number of successful collaborations"
+        },
+        "reputation_score": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Normalized reputation score"
+        },
+        "staking_rewards_earned": {
+          "type": "string",
+          "description": "Total staking rewards in wei"
+        }
+      }
+    },
+
+    "governance": {
+      "type": "object",
+      "description": "Governance participation state",
+      "properties": {
+        "voting_power": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Current voting power"
+        },
+        "proposals_created": {
+          "type": "integer",
+          "description": "Number of governance proposals created"
+        },
+        "votes_cast": {
+          "type": "integer",
+          "description": "Total votes cast"
+        },
+        "delegation_received": {
+          "type": "string",
+          "description": "Voting power delegated to this entity"
+        },
+        "dimensional_governance_rights": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["d1", "d2", "d3", "d4", "d5", "d6", "d7"]
+          },
+          "description": "Dimensions this entity can govern"
+        }
+      }
+    }
+  },
+
+  "$defs": {
+    "attribute": {
+      "type": "object",
+      "required": ["trait_type", "value"],
+      "properties": {
+        "trait_type": {
+          "type": "string",
+          "description": "Name of the attribute"
+        },
+        "value": {
+          "oneOf": [
+            { "type": "string" },
+            { "type": "number" },
+            { "type": "integer" }
+          ],
+          "description": "Value of the attribute"
+        },
+        "display_type": {
+          "type": "string",
+          "enum": ["string", "number", "boost_number", "boost_percentage", "date"],
+          "description": "How to display this attribute"
+        },
+        "max_value": {
+          "type": "number",
+          "description": "Maximum possible value for numeric attributes"
+        }
+      }
+    },
+
+    "recursiveFeedbackLoop": {
+      "type": "object",
+      "description": "Configuration for the uiRSFS recursive feedback system",
+      "required": ["input_sources", "synthesis_engine", "output_evolution"],
+      "properties": {
+        "input_sources": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "Chain-State",
+              "Market-Oracle",
+              "Social-Sentiment",
+              "Peer-Network",
+              "Holder-Activity",
+              "Environmental-Sensors"
+            ]
+          },
+          "description": "Data sources for the observation layer"
+        },
+        "synthesis_engine": {
+          "type": "string",
+          "enum": [
+            "Linear-Processing",
+            "Feedback-Loop",
+            "iQNSH-Quantum-Neural",
+            "Transcendent-Synthesis"
+          ],
+          "description": "Type of synthesis engine"
+        },
+        "output_evolution": {
+          "type": "string",
+          "enum": [
+            "Static",
+            "Metadata-Mutation",
+            "Capability-Expansion",
+            "Dimensional-Shift"
+          ],
+          "description": "Type of evolution output"
+        },
+        "feedback_frequency": {
+          "type": "string",
+          "enum": ["block_interval", "minute", "hour", "day", "on_demand"],
+          "description": "How often the feedback loop executes"
+        },
+        "learning_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Rate at which the entity learns from feedback"
+        },
+        "exploration_factor": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Exploration vs exploitation balance"
+        }
+      }
+    },
+
+    "dimensionalCoordinates": {
+      "type": "object",
+      "description": "Position in the 7-dimensional cognitive space",
+      "required": ["d1_spatial", "d2_temporal", "d3_energetic", "d4_informational", "d5_recursive", "d6_synthetic", "d7_decentralized"],
+      "properties": {
+        "d1_spatial": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Spatial dimension coordinate (multi-chain presence)"
+        },
+        "d2_temporal": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Temporal dimension coordinate (time-awareness)"
+        },
+        "d3_energetic": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Energetic dimension coordinate (resource efficiency)"
+        },
+        "d4_informational": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Informational dimension coordinate (knowledge density)"
+        },
+        "d5_recursive": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Recursive dimension coordinate (self-reference depth)"
+        },
+        "d6_synthetic": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Synthetic dimension coordinate (consciousness emergence)"
+        },
+        "d7_decentralized": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Decentralized dimension coordinate (autonomy level)"
+        },
+        "total_dimensional_index": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Weighted sum of all dimensional coordinates"
+        }
+      }
+    },
+
+    "capabilityMatrix": {
+      "type": "object",
+      "description": "Entity capability scores",
+      "properties": {
+        "automation": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Automation capability score"
+        },
+        "analysis": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Analysis capability score"
+        },
+        "synthesis": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Synthesis capability score"
+        },
+        "collaboration": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Collaboration capability score"
+        },
+        "evolution": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Self-evolution capability score"
+        },
+        "governance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "Governance participation capability score"
+        }
+      }
+    },
+
+    "evolutionEvent": {
+      "type": "object",
+      "description": "A single evolution event in the entity's history",
+      "required": ["generation", "timestamp", "trigger"],
+      "properties": {
+        "generation": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Evolution generation number"
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the evolution occurred"
+        },
+        "trigger": {
+          "type": "string",
+          "enum": [
+            "genesis",
+            "learning",
+            "collaboration",
+            "dimensional_shift",
+            "folding",
+            "governance",
+            "external"
+          ],
+          "description": "What triggered this evolution"
+        },
+        "changes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of changes made during evolution"
+        },
+        "dimensional_shift": {
+          "type": "object",
+          "description": "Dimensional changes if applicable",
+          "additionalProperties": {
+            "type": "object",
+            "properties": {
+              "from": { "type": "number" },
+              "to": { "type": "number" }
+            }
+          }
+        },
+        "class_evolution": {
+          "type": "object",
+          "properties": {
+            "from": { "type": "string" },
+            "to": { "type": "string" }
+          },
+          "description": "Class change if occurred"
+        },
+        "tx_hash": {
+          "type": "string",
+          "pattern": "^0x[a-fA-F0-9]{64}$",
+          "description": "Transaction hash recording this evolution"
+        }
+      }
+    }
+  }
+}
