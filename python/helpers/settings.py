@@ -89,6 +89,10 @@ class Settings(TypedDict):
 
     shell_interface: Literal['local','ssh']
 
+    # Live container connection settings
+    live_container_id: str
+    live_container_name: str
+
     stt_model_size: str
     stt_language: str
     stt_silence_threshold: float
@@ -922,6 +926,47 @@ def convert_out(settings: Settings) -> SettingsOutput:
         "tab": "developer",
     }
 
+    # Live container connection section
+    container_fields: list[SettingsField] = []
+
+    container_fields.append(
+        {
+            "id": "live_containers_list",
+            "title": "Connect to Live Container",
+            "description": "Connect to an existing running Docker container for code execution. This allows you to attach to containers that are already running Agent Zero or other services.",
+            "type": "button",
+            "value": "Browse Containers",
+        }
+    )
+
+    container_fields.append(
+        {
+            "id": "live_container_id",
+            "title": "Connected Container ID",
+            "description": "The ID of the currently connected container (if any).",
+            "type": "text",
+            "value": settings["live_container_id"],
+        }
+    )
+
+    container_fields.append(
+        {
+            "id": "live_container_name",
+            "title": "Connected Container Name",
+            "description": "The name of the currently connected container (if any).",
+            "type": "text",
+            "value": settings["live_container_name"],
+        }
+    )
+
+    container_section: SettingsSection = {
+        "id": "container",
+        "title": "Live Container Connection",
+        "description": "Connect to an existing Docker container for code execution. Use this to attach to live containers running Agent Zero or other services with SSH access.",
+        "fields": container_fields,
+        "tab": "developer",
+    }
+
     # code_exec_fields: list[SettingsField] = []
 
     # code_exec_fields.append(
@@ -1295,6 +1340,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
             update_checker_section,
             backup_section,
             dev_section,
+            container_section,
             # code_exec_section,
         ]
     }
@@ -1517,6 +1563,8 @@ def get_default_settings() -> Settings:
         rfc_port_http=55080,
         rfc_port_ssh=55022,
         shell_interface="local" if runtime.is_dockerized() else "ssh",
+        live_container_id="",
+        live_container_name="",
         stt_model_size="base",
         stt_language="en",
         stt_silence_threshold=0.3,

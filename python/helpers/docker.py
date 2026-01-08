@@ -97,3 +97,87 @@ class DockerContainerManager:
             PrintStyle.standard(f"Started container with ID: {self.container.id}")
             if self.logger: self.logger.log(type="info", content=f"Started container with ID: {self.container.id}")
             time.sleep(5) # this helps to get SSH ready
+
+    def get_container_by_id(self, container_id: str):
+        """Get a container by its ID or name."""
+        if not self.client:
+            self.client = self.init_docker()
+        try:
+            return self.client.containers.get(container_id)
+        except docker.errors.NotFound:
+            return None
+
+    def get_container_connection_info(self, container_id: str) -> Optional[dict]:
+        """Get connection information for a specific container."""
+        container = self.get_container_by_id(container_id)
+        if not container:
+            return None
+
+        ssh_port = None
+        web_port = None
+
+        if container.ports.get("22/tcp"):
+            ssh_port = container.ports["22/tcp"][0].get("HostPort")
+        if container.ports.get("80/tcp"):
+            web_port = container.ports["80/tcp"][0].get("HostPort")
+
+        return {
+            "id": container.id,
+            "short_id": container.short_id,
+            "name": container.name,
+            "status": container.status,
+            "image": str(container.image.tags[0]) if container.image.tags else str(container.image.id)[:12],
+            "ssh_port": int(ssh_port) if ssh_port else None,
+            "web_port": int(web_port) if web_port else None,
+            "ssh_available": ssh_port is not None and container.status == "running",
+        }
+
+    def get_all_containers(self, running_only: bool = False) -> list[dict]:
+        """Get all containers with their connection information."""
+        if not self.client:
+            self.client = self.init_docker()
+
+        containers = self.client.containers.list(all=not running_only)
+        result = []
+
+        for container in containers:
+            ssh_port = None
+            web_port = None
+
+            if container.ports.get("22/tcp"):
+                ssh_port = container.ports["22/tcp"][0].get("HostPort")
+            if container.ports.get("80/tcp"):
+                web_port = container.ports["80/tcp"][0].get("HostPort")
+
+            result.append({
+                "id": container.id,
+                "short_id": container.short_id,
+                "name": container.name,
+                "status": container.status,
+                "image": str(container.image.tags[0]) if container.image.tags else str(container.image.id)[:12],
+                "ssh_port": int(ssh_port) if ssh_port else None,
+                "web_port": int(web_port) if web_port else None,
+                "ssh_available": ssh_port is not None and container.status == "running",
+            })
+
+        return result
+
+    def test_ssh_connection(self, host: str, port: int, username: str, password: str, timeout: int = 5) -> tuple[bool, str]:
+        """Test SSH connection to a container."""
+        try:
+            import paramiko
+            client = paramiko.SSHClient()
+            client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            client.connect(
+                hostname=host,
+                port=port,
+                username=username,
+                password=password,
+                timeout=timeout,
+                allow_agent=False,
+                look_for_keys=False
+            )
+            client.close()
+            return True, "SSH connection successful"
+        except Exception as e:
+            return False, f"SSH connection failed: {str(e)}"
