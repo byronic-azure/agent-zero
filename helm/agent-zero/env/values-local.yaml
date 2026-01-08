@@ -1,0 +1,52 @@
+# Local Development Environment
+# Usage: helm install agent-zero ./helm/agent-zero -f ./helm/agent-zero/env/values-local.yaml
+
+global:
+  environment: local
+
+replicaCount: 1
+
+image:
+  pullPolicy: Always
+
+# Use NodePort for easy local access
+service:
+  type: NodePort
+  nodePort: 30080
+
+# Disable ingress for local dev
+ingress:
+  enabled: false
+
+# Lower resource limits for local development
+resources:
+  limits:
+    cpu: "1"
+    memory: 2Gi
+  requests:
+    cpu: 250m
+    memory: 256Mi
+
+# Simpler persistence for local dev
+persistence:
+  enabled: true
+  data:
+    enabled: true
+    storageClass: "standard"
+    size: 2Gi
+  logs:
+    enabled: true
+    storageClass: "standard"
+    size: 1Gi
+  workdir:
+    enabled: true
+    storageClass: "standard"
+    size: 5Gi
+
+env:
+  A0_LOG_LEVEL: debug
+  A0_ENV: local
+
+# Disable autoscaling for local
+autoscaling:
+  enabled: false

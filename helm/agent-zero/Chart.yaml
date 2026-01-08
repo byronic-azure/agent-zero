@@ -1,0 +1,22 @@
+apiVersion: v2
+name: agent-zero
+description: A Helm chart for Agent Zero AI assistant
+type: application
+version: 1.0.0
+appVersion: "latest"
+
+keywords:
+  - agent-zero
+  - ai
+  - assistant
+  - llm
+
+maintainers:
+  - name: Agent Zero Team
+
+home: https://github.com/frdel/agent-zero
+
+sources:
+  - https://github.com/frdel/agent-zero
+
+dependencies: []

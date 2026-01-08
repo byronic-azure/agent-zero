@@ -1,0 +1,101 @@
+# Azure Kubernetes Service (AKS) Environment
+# Usage: helm install agent-zero ./helm/agent-zero -f ./helm/agent-zero/env/values-azure.yaml
+
+global:
+  environment: azure
+
+replicaCount: 2
+
+image:
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  annotations:
+    service.beta.kubernetes.io/azure-load-balancer-internal: "false"
+
+# Azure Application Gateway Ingress Controller (AGIC) or NGINX
+ingress:
+  enabled: true
+  className: "azure/application-gateway"
+  annotations:
+    kubernetes.io/ingress.class: azure/application-gateway
+    appgw.ingress.kubernetes.io/ssl-redirect: "true"
+    appgw.ingress.kubernetes.io/connection-draining: "true"
+    appgw.ingress.kubernetes.io/connection-draining-timeout: "30"
+    # For cert-manager:
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: agent-zero.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: agent-zero-tls
+      hosts:
+        - agent-zero.example.com
+
+# Production-grade resources
+resources:
+  limits:
+    cpu: "4"
+    memory: 8Gi
+  requests:
+    cpu: "1"
+    memory: 2Gi
+
+# Azure managed disks
+persistence:
+  enabled: true
+  data:
+    enabled: true
+    storageClass: "managed-premium"
+    size: 20Gi
+  logs:
+    enabled: true
+    storageClass: "managed-csi"
+    size: 10Gi
+  workdir:
+    enabled: true
+    storageClass: "managed-premium"
+    size: 50Gi
+
+env:
+  A0_LOG_LEVEL: info
+  A0_ENV: production
+
+# Enable autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# Azure Workload Identity
+serviceAccount:
+  create: true
+  annotations:
+    azure.workload.identity/client-id: "<your-azure-client-id>"
+
+podLabels:
+  azure.workload.identity/use: "true"
+
+# Pod spread across zones
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: agent-zero
+
+# Use Azure Key Vault for secrets (recommended)
+secrets:
+  create: false
+  existingSecret: "agent-zero-api-keys"
+
+# Node selection for specific VM types
+nodeSelector:
+  kubernetes.io/os: linux
+  # agentpool: workload

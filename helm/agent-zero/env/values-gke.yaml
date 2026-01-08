@@ -1,0 +1,88 @@
+# Google Kubernetes Engine (GKE) Environment
+# Usage: helm install agent-zero ./helm/agent-zero -f ./helm/agent-zero/env/values-gke.yaml
+
+global:
+  environment: gke
+
+replicaCount: 2
+
+image:
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+
+# GKE Ingress with Google Cloud Load Balancer
+ingress:
+  enabled: true
+  className: "gce"
+  annotations:
+    kubernetes.io/ingress.class: "gce"
+    kubernetes.io/ingress.global-static-ip-name: "agent-zero-ip"
+    # For managed SSL certificate:
+    # networking.gke.io/managed-certificates: "agent-zero-cert"
+  hosts:
+    - host: agent-zero.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Production-grade resources
+resources:
+  limits:
+    cpu: "4"
+    memory: 8Gi
+  requests:
+    cpu: "1"
+    memory: 2Gi
+
+# GKE SSD storage class for better performance
+persistence:
+  enabled: true
+  data:
+    enabled: true
+    storageClass: "premium-rwo"
+    size: 20Gi
+  logs:
+    enabled: true
+    storageClass: "standard-rwo"
+    size: 10Gi
+  workdir:
+    enabled: true
+    storageClass: "premium-rwo"
+    size: 50Gi
+
+env:
+  A0_LOG_LEVEL: info
+  A0_ENV: production
+
+# Enable autoscaling
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+# GKE Workload Identity
+serviceAccount:
+  create: true
+  annotations:
+    iam.gke.io/gcp-service-account: agent-zero@PROJECT_ID.iam.gserviceaccount.com
+
+# Pod spread across zones
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: topology.kubernetes.io/zone
+    whenUnsatisfiable: ScheduleAnyway
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: agent-zero
+
+# Use external secrets (recommended for production)
+secrets:
+  create: false
+  existingSecret: "agent-zero-api-keys"

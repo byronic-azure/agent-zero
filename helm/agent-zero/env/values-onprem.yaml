@@ -1,0 +1,98 @@
+# On-Premises / Self-Hosted Kubernetes Environment
+# Usage: helm install agent-zero ./helm/agent-zero -f ./helm/agent-zero/env/values-onprem.yaml
+
+global:
+  environment: onprem
+
+replicaCount: 2
+
+image:
+  pullPolicy: IfNotPresent
+
+# Pull from private registry if needed
+# imagePullSecrets:
+#   - name: private-registry-secret
+
+service:
+  type: ClusterIP
+
+# NGINX Ingress Controller (commonly used on-prem)
+ingress:
+  enabled: true
+  className: "nginx"
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
+    # For cert-manager with Let's Encrypt:
+    # cert-manager.io/cluster-issuer: "letsencrypt-prod"
+  hosts:
+    - host: agent-zero.internal.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: agent-zero-tls
+      hosts:
+        - agent-zero.internal.example.com
+
+# Moderate resources for on-prem
+resources:
+  limits:
+    cpu: "2"
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 1Gi
+
+# Use local provisioner or NFS
+persistence:
+  enabled: true
+  data:
+    enabled: true
+    storageClass: "nfs-client"  # or "local-path" for local provisioner
+    size: 20Gi
+  logs:
+    enabled: true
+    storageClass: "nfs-client"
+    size: 10Gi
+  workdir:
+    enabled: true
+    storageClass: "nfs-client"
+    size: 50Gi
+
+env:
+  A0_LOG_LEVEL: info
+  A0_ENV: production
+
+# Manual scaling (or enable HPA if metrics-server is installed)
+autoscaling:
+  enabled: false
+
+# Optional: specific node placement
+nodeSelector: {}
+  # kubernetes.io/hostname: worker-node-1
+
+# Tolerate taints if needed
+tolerations: []
+  # - key: "dedicated"
+  #   operator: "Equal"
+  #   value: "agent-zero"
+  #   effect: "NoSchedule"
+
+# Pod anti-affinity for HA
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: agent-zero
+          topologyKey: kubernetes.io/hostname
+
+# Use Kubernetes secrets
+secrets:
+  create: false
+  existingSecret: "agent-zero-api-keys"

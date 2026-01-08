@@ -1,8 +1,113 @@
+version: "3.9"
+
 services:
   agent-zero:
     container_name: agent-zero
     image: agent0ai/agent-zero:latest
+    restart: unless-stopped
+
     volumes:
-      - ./agent-zero:/a0
+      # Persistent data
+      - agent-zero-data:/a0/data
+      - agent-zero-logs:/a0/logs
+      # Local config override (optional)
+      - ./config:/a0/config:ro
+      # Work directory for agent operations
+      - ./workdir:/a0/workdir
+
     ports:
-      - "50080:80"
+      - "${A0_PORT:-50080}:80"
+
+    environment:
+      # Core settings
+      - A0_LOG_LEVEL=${A0_LOG_LEVEL:-info}
+      - A0_ENV=${A0_ENV:-development}
+      # API Keys (use .env file or secrets)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      # Optional integrations
+      - A0_REDIS_URL=${A0_REDIS_URL:-}
+      - A0_DATABASE_URL=${A0_DATABASE_URL:-}
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health", "||", "exit", "1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    deploy:
+      resources:
+        limits:
+          cpus: "${A0_CPU_LIMIT:-2.0}"
+          memory: ${A0_MEMORY_LIMIT:-4G}
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+    networks:
+      - agent-zero-net
+
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Redis for caching/queuing
+  redis:
+    image: redis:7-alpine
+    container_name: agent-zero-redis
+    restart: unless-stopped
+    profiles:
+      - with-redis
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agent-zero-net
+
+  # Optional: Traefik reverse proxy for SSL
+  traefik:
+    image: traefik:v3.0
+    container_name: agent-zero-proxy
+    restart: unless-stopped
+    profiles:
+      - with-proxy
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@example.com}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - traefik-certs:/letsencrypt
+    networks:
+      - agent-zero-net
+
+volumes:
+  agent-zero-data:
+    driver: local
+  agent-zero-logs:
+    driver: local
+  redis-data:
+    driver: local
+  traefik-certs:
+    driver: local
+
+networks:
+  agent-zero-net:
+    driver: bridge

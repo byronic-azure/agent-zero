@@ -1,0 +1,194 @@
+# Default values for agent-zero
+# This is a YAML-formatted file.
+
+# =============================================================================
+# GLOBAL SETTINGS
+# =============================================================================
+global:
+  environment: development
+
+# =============================================================================
+# IMAGE CONFIGURATION
+# =============================================================================
+image:
+  repository: agent0ai/agent-zero
+  tag: latest
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+# =============================================================================
+# REPLICA & SCALING
+# =============================================================================
+replicaCount: 1
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  targetMemoryUtilizationPercentage: 80
+
+# =============================================================================
+# SERVICE CONFIGURATION
+# =============================================================================
+service:
+  type: ClusterIP
+  port: 80
+  targetPort: 80
+  annotations: {}
+
+# =============================================================================
+# INGRESS CONFIGURATION
+# =============================================================================
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+  hosts:
+    - host: agent-zero.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+  #  - secretName: agent-zero-tls
+  #    hosts:
+  #      - agent-zero.local
+
+# =============================================================================
+# RESOURCE LIMITS
+# =============================================================================
+resources:
+  limits:
+    cpu: "2"
+    memory: 4Gi
+  requests:
+    cpu: 500m
+    memory: 512Mi
+
+# =============================================================================
+# HEALTH CHECKS
+# =============================================================================
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# =============================================================================
+# ENVIRONMENT VARIABLES
+# =============================================================================
+env:
+  A0_LOG_LEVEL: info
+  A0_ENV: development
+
+# =============================================================================
+# SECRETS (use external secrets in production)
+# =============================================================================
+secrets:
+  # Set to true to create a secret from values below
+  create: false
+  # Name of existing secret to use (if create is false)
+  existingSecret: ""
+  # Values (only used if create is true - NOT recommended for production)
+  data:
+    OPENAI_API_KEY: ""
+    ANTHROPIC_API_KEY: ""
+
+# =============================================================================
+# PERSISTENCE
+# =============================================================================
+persistence:
+  enabled: true
+
+  data:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 10Gi
+    mountPath: /a0/data
+
+  logs:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 5Gi
+    mountPath: /a0/logs
+
+  workdir:
+    enabled: true
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    size: 20Gi
+    mountPath: /a0/workdir
+
+# =============================================================================
+# CONFIG MAP
+# =============================================================================
+config:
+  enabled: false
+  mountPath: /a0/config
+  data: {}
+    # config.yaml: |
+    #   key: value
+
+# =============================================================================
+# SERVICE ACCOUNT
+# =============================================================================
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+# =============================================================================
+# POD SETTINGS
+# =============================================================================
+podAnnotations: {}
+podLabels: {}
+
+podSecurityContext:
+  fsGroup: 1000
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: false
+
+# =============================================================================
+# SCHEDULING
+# =============================================================================
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+topologySpreadConstraints: []
+
+# =============================================================================
+# REDIS (OPTIONAL DEPENDENCY)
+# =============================================================================
+redis:
+  enabled: false
+  architecture: standalone
+  auth:
+    enabled: false
+  master:
+    persistence:
+      enabled: true
+      size: 1Gi

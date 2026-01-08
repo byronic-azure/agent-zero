@@ -1,0 +1,130 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agent-zero.fullname" . }}
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+spec:
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "agent-zero.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "agent-zero.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "agent-zero.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.targetPort }}
+              protocol: TCP
+          {{- if .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml .Values.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml .Values.readinessProbe | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          env:
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
+            {{- end }}
+            {{- if or .Values.secrets.create .Values.secrets.existingSecret }}
+            - name: OPENAI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agent-zero.secretName" . }}
+                  key: OPENAI_API_KEY
+                  optional: true
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "agent-zero.secretName" . }}
+                  key: ANTHROPIC_API_KEY
+                  optional: true
+            {{- end }}
+            {{- if .Values.redis.enabled }}
+            - name: A0_REDIS_URL
+              value: "redis://{{ include "agent-zero.fullname" . }}-redis-master:6379"
+            {{- end }}
+          volumeMounts:
+            {{- if .Values.persistence.data.enabled }}
+            - name: data
+              mountPath: {{ .Values.persistence.data.mountPath }}
+            {{- end }}
+            {{- if .Values.persistence.logs.enabled }}
+            - name: logs
+              mountPath: {{ .Values.persistence.logs.mountPath }}
+            {{- end }}
+            {{- if .Values.persistence.workdir.enabled }}
+            - name: workdir
+              mountPath: {{ .Values.persistence.workdir.mountPath }}
+            {{- end }}
+            {{- if .Values.config.enabled }}
+            - name: config
+              mountPath: {{ .Values.config.mountPath }}
+              readOnly: true
+            {{- end }}
+      volumes:
+        {{- if .Values.persistence.data.enabled }}
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "agent-zero.fullname" . }}-data
+        {{- end }}
+        {{- if .Values.persistence.logs.enabled }}
+        - name: logs
+          persistentVolumeClaim:
+            claimName: {{ include "agent-zero.fullname" . }}-logs
+        {{- end }}
+        {{- if .Values.persistence.workdir.enabled }}
+        - name: workdir
+          persistentVolumeClaim:
+            claimName: {{ include "agent-zero.fullname" . }}-workdir
+        {{- end }}
+        {{- if .Values.config.enabled }}
+        - name: config
+          configMap:
+            name: {{ include "agent-zero.fullname" . }}-config
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

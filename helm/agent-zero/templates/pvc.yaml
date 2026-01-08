@@ -1,0 +1,58 @@
+{{- if .Values.persistence.enabled }}
+{{- if .Values.persistence.data.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-data
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.data.accessMode }}
+  {{- if .Values.persistence.data.storageClass }}
+  storageClassName: {{ .Values.persistence.data.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.data.size }}
+{{- end }}
+
+{{- if .Values.persistence.logs.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-logs
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.logs.accessMode }}
+  {{- if .Values.persistence.logs.storageClass }}
+  storageClassName: {{ .Values.persistence.logs.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.logs.size }}
+{{- end }}
+
+{{- if .Values.persistence.workdir.enabled }}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-workdir
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.persistence.workdir.accessMode }}
+  {{- if .Values.persistence.workdir.storageClass }}
+  storageClassName: {{ .Values.persistence.workdir.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.workdir.size }}
+{{- end }}
+{{- end }}
