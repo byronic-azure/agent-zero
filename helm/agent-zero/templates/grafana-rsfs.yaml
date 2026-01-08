@@ -1,0 +1,457 @@
+{{- if .Values.rsfs.enabled }}
+# =============================================================================
+# RSFS SwarmCore Grafana Dashboard
+# Trading metrics, quantum protocol status, and wallet binding
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-grafana-rsfs
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "RSFS SwarmCore"
+data:
+  rsfs-swarmcore-dashboard.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "datasource": "-- Grafana --",
+            "enable": true,
+            "hide": true,
+            "iconColor": "#FF00FF",
+            "name": "Trading Events",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "title": "RSFS Ultra SwarmCore 13.607x",
+      "uid": "rsfs-swarmcore",
+      "version": 1,
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["rsfs", "swarmcore", "trading", "quantum"],
+      "templating": {
+        "list": [
+          {
+            "name": "wallet",
+            "type": "constant",
+            "current": {
+              "value": "{{ .Values.rsfs.wallet.address }}"
+            }
+          },
+          {
+            "name": "swarm_version",
+            "type": "constant",
+            "current": {
+              "value": "{{ .Values.rsfs.swarmcore.version }}"
+            }
+          }
+        ]
+      },
+      "panels": [
+        {
+          "title": "🚀 RSFS ULTRA STATUS",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "rsfs_system_status",
+              "legendFormat": "Status"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {"type": "value", "options": {"1": {"text": "🟢 OPERATIONAL", "color": "#00FF00"}}},
+                {"type": "value", "options": {"0": {"text": "🔴 OFFLINE", "color": "#FF0000"}}}
+              ],
+              "color": {"mode": "thresholds"}
+            }
+          }
+        },
+        {
+          "title": "⚛️ QUANTUM PROTOCOL",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+          "targets": [
+            {
+              "expr": "rsfs_quantum_verified",
+              "legendFormat": "Quantum"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {"type": "value", "options": {"1": {"text": "✅ VERIFIED", "color": "#FF00FF"}}},
+                {"type": "value", "options": {"0": {"text": "❌ UNVERIFIED", "color": "#FF0000"}}}
+              ]
+            }
+          }
+        },
+        {
+          "title": "🔗 WALLET BINDING",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 0},
+          "targets": [
+            {
+              "expr": "rsfs_wallet_bound{wallet=\"$wallet\"}",
+              "legendFormat": "Binding"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {"type": "value", "options": {"1": {"text": "🔒 HARDWARE BOUND", "color": "#00FFFF"}}},
+                {"type": "value", "options": {"0": {"text": "⚠️ UNBOUND", "color": "#FFFF00"}}}
+              ]
+            }
+          }
+        },
+        {
+          "title": "SwarmCore Version",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 0},
+          "targets": [
+            {
+              "expr": "rsfs_swarmcore_version",
+              "legendFormat": "Version"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {"type": "special", "options": {"match": "null", "result": {"text": "13.607x", "color": "#FF00FF"}}}
+              ]
+            }
+          }
+        },
+        {
+          "title": "📊 TRADING METRICS",
+          "type": "row",
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 4},
+          "collapsed": false
+        },
+        {
+          "title": "Total Trades",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 4, "x": 0, "y": 5},
+          "targets": [
+            {
+              "expr": "rsfs_total_trades{wallet=\"$wallet\"}",
+              "legendFormat": "Trades"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "color": {"fixedColor": "#FF00FF", "mode": "fixed"}
+            }
+          }
+        },
+        {
+          "title": "Profitable Trades",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 4, "x": 4, "y": 5},
+          "targets": [
+            {
+              "expr": "rsfs_profitable_trades{wallet=\"$wallet\"}",
+              "legendFormat": "Profitable"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "color": {"fixedColor": "#00FF00", "mode": "fixed"}
+            }
+          }
+        },
+        {
+          "title": "Win Rate",
+          "type": "gauge",
+          "gridPos": {"h": 4, "w": 4, "x": 8, "y": 5},
+          "targets": [
+            {
+              "expr": "rsfs_win_rate{wallet=\"$wallet\"}",
+              "legendFormat": "Win Rate"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "max": 100,
+              "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 30},
+                  {"color": "green", "value": 50}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Total P/L (SOL)",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 4, "x": 12, "y": 5},
+          "targets": [
+            {
+              "expr": "rsfs_total_pnl_sol{wallet=\"$wallet\"}",
+              "legendFormat": "P/L"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "decimals": 4,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 0}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Total P/L (USD)",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 4, "x": 16, "y": 5},
+          "targets": [
+            {
+              "expr": "rsfs_total_pnl_usd{wallet=\"$wallet\"}",
+              "legendFormat": "P/L USD"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "currencyUSD",
+              "decimals": 2,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "green", "value": 0}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Max Drawdown",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 4, "x": 20, "y": 5},
+          "targets": [
+            {
+              "expr": "rsfs_max_drawdown{wallet=\"$wallet\"}",
+              "legendFormat": "Drawdown"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percent",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "green", "value": null},
+                  {"color": "yellow", "value": 10},
+                  {"color": "red", "value": 25}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "⚛️ QUANTUM METRICS",
+          "type": "row",
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 9},
+          "collapsed": false
+        },
+        {
+          "title": "Entanglement Depth",
+          "type": "gauge",
+          "gridPos": {"h": 6, "w": 6, "x": 0, "y": 10},
+          "targets": [
+            {
+              "expr": "rsfs_quantum_entanglement_depth",
+              "legendFormat": "Depth"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "max": 16,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 4},
+                  {"color": "#FF00FF", "value": 8}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Quantum Fidelity",
+          "type": "gauge",
+          "gridPos": {"h": 6, "w": 6, "x": 6, "y": 10},
+          "targets": [
+            {
+              "expr": "rsfs_quantum_fidelity",
+              "legendFormat": "Fidelity"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "max": 1,
+              "unit": "percentunit",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 0.9},
+                  {"color": "#FF00FF", "value": 0.95}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Coherence Metrics",
+          "type": "timeseries",
+          "gridPos": {"h": 6, "w": 12, "x": 12, "y": 10},
+          "targets": [
+            {
+              "expr": "rsfs_quantum_coherence",
+              "legendFormat": "{{`{{metric}}`}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 20,
+                "gradientMode": "opacity"
+              },
+              "color": {"fixedColor": "#FF00FF", "mode": "fixed"}
+            }
+          }
+        },
+        {
+          "title": "🔗 ATTESTATION CHAIN",
+          "type": "row",
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 16},
+          "collapsed": false
+        },
+        {
+          "title": "Wallet Binding History",
+          "type": "timeseries",
+          "gridPos": {"h": 6, "w": 12, "x": 0, "y": 17},
+          "targets": [
+            {
+              "expr": "increase(rsfs_wallet_binding_attestations_total{wallet=\"$wallet\"}[1h])",
+              "legendFormat": "Bindings"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 20
+              },
+              "color": {"fixedColor": "#00FFFF", "mode": "fixed"}
+            }
+          }
+        },
+        {
+          "title": "Trading Attestations",
+          "type": "timeseries",
+          "gridPos": {"h": 6, "w": 12, "x": 12, "y": 17},
+          "targets": [
+            {
+              "expr": "increase(rsfs_trading_attestations_total{wallet=\"$wallet\"}[1h])",
+              "legendFormat": "Attestations"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 20
+              },
+              "color": {"fixedColor": "#FF00FF", "mode": "fixed"}
+            }
+          }
+        },
+        {
+          "title": "🐝 SWARMCORE STATUS",
+          "type": "row",
+          "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23},
+          "collapsed": false
+        },
+        {
+          "title": "Active Swarm Nodes",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 24},
+          "targets": [
+            {
+              "expr": "rsfs_swarm_node_count",
+              "legendFormat": "Nodes"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"fixedColor": "#FF00FF", "mode": "fixed"}
+            }
+          }
+        },
+        {
+          "title": "Consensus Round",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 24},
+          "targets": [
+            {
+              "expr": "rsfs_swarm_consensus_round",
+              "legendFormat": "Round"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"fixedColor": "#00FFFF", "mode": "fixed"}
+            }
+          }
+        },
+        {
+          "title": "Swarm State Root",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 12, "x": 12, "y": 24},
+          "targets": [
+            {
+              "expr": "rsfs_swarm_state_root",
+              "legendFormat": "State Root"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {"type": "special", "options": {"match": "null", "result": {"text": "0x...pending"}}}
+              ]
+            }
+          }
+        }
+      ],
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "refresh": "10s"
+    }
+{{- end }}

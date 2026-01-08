@@ -1,0 +1,433 @@
+{{- if .Values.rsfs.enabled }}
+# =============================================================================
+# RSFS Ultra SwarmCore Integration
+# Sovereign trading attestation with quantum protocol verification
+# =============================================================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-rsfs-config
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rsfs
+    dd7.ai/module: swarmcore
+data:
+  # SwarmCore Configuration
+  swarmcore-version: {{ .Values.rsfs.swarmcore.version | quote }}
+  quantum-protocol: {{ .Values.rsfs.quantum.protocol | quote }}
+
+  # Wallet Configuration
+  primary-wallet: {{ .Values.rsfs.wallet.address | quote }}
+  wallet-chain: {{ .Values.rsfs.wallet.chain | quote }}
+
+  # Trading Parameters
+  max-slippage: {{ .Values.rsfs.trading.maxSlippage | quote }}
+  risk-threshold: {{ .Values.rsfs.trading.riskThreshold | quote }}
+
+  # Attestation Settings
+  attestation-interval: {{ .Values.rsfs.attestation.interval | quote }}
+
+  rsfs-config.yaml: |
+    version: "13.607x"
+    swarmcore:
+      enabled: true
+      version: {{ .Values.rsfs.swarmcore.version | quote }}
+      mode: {{ .Values.rsfs.swarmcore.mode | quote }}
+
+    quantum:
+      protocol: {{ .Values.rsfs.quantum.protocol | quote }}
+      verification: true
+      entanglementDepth: {{ .Values.rsfs.quantum.entanglementDepth }}
+
+    wallet:
+      address: {{ .Values.rsfs.wallet.address | quote }}
+      chain: {{ .Values.rsfs.wallet.chain | quote }}
+      hardwareBound: true
+
+    trading:
+      maxSlippage: {{ .Values.rsfs.trading.maxSlippage }}
+      riskThreshold: {{ .Values.rsfs.trading.riskThreshold }}
+      attestationRequired: true
+
+    attestation:
+      interval: {{ .Values.rsfs.attestation.interval | quote }}
+      bindToTPM: {{ .Values.hardware.tpm.enabled }}
+      bindToSGX: {{ .Values.hardware.sgx.enabled }}
+      zkProofRequired: true
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-rsfs-secrets
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: rsfs
+type: Opaque
+data:
+  # Wallet private key should be provided via external secret management
+  # This is a placeholder - use sealed-secrets or external-secrets in production
+  wallet-keypair: {{ .Values.rsfs.wallet.keypairSecret | default "" | b64enc | quote }}
+---
+# =============================================================================
+# RSFS SwarmCore Controller Deployment
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-swarmcore
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: swarmcore
+    dd7.ai/module: rsfs
+spec:
+  replicas: {{ .Values.rsfs.swarmcore.replicas }}
+  selector:
+    matchLabels:
+      {{- include "agent-zero.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: swarmcore
+  template:
+    metadata:
+      labels:
+        {{- include "agent-zero.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: swarmcore
+        dd7.ai/attestation: "true"
+        dd7.ai/spire-workload: "true"
+      annotations:
+        dd7.ai/rsfs-version: {{ .Values.rsfs.swarmcore.version | quote }}
+        dd7.ai/quantum-protocol: {{ .Values.rsfs.quantum.protocol | quote }}
+        dd7.ai/wallet: {{ .Values.rsfs.wallet.address | quote }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "agent-zero.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: swarmcore
+          image: "{{ .Values.rsfs.swarmcore.image.repository }}:{{ .Values.rsfs.swarmcore.image.tag }}"
+          imagePullPolicy: {{ .Values.rsfs.swarmcore.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 9090
+              protocol: TCP
+            - name: metrics
+              containerPort: 9091
+              protocol: TCP
+          env:
+            # Cluster identity
+            - name: DD7_CLUSTER_ID
+              value: {{ .Values.attestation.clusterID | quote }}
+            - name: DD7_PERSONA
+              value: {{ .Values.persona.default | quote }}
+            # RSFS Configuration
+            - name: RSFS_VERSION
+              value: {{ .Values.rsfs.swarmcore.version | quote }}
+            - name: RSFS_MODE
+              value: {{ .Values.rsfs.swarmcore.mode | quote }}
+            # Quantum Protocol
+            - name: QUANTUM_PROTOCOL
+              value: {{ .Values.rsfs.quantum.protocol | quote }}
+            - name: QUANTUM_ENTANGLEMENT_DEPTH
+              value: {{ .Values.rsfs.quantum.entanglementDepth | quote }}
+            # Wallet
+            - name: WALLET_ADDRESS
+              value: {{ .Values.rsfs.wallet.address | quote }}
+            - name: WALLET_CHAIN
+              value: {{ .Values.rsfs.wallet.chain | quote }}
+            # Trading
+            - name: MAX_SLIPPAGE
+              value: {{ .Values.rsfs.trading.maxSlippage | quote }}
+            - name: RISK_THRESHOLD
+              value: {{ .Values.rsfs.trading.riskThreshold | quote }}
+            # Consciousness metrics
+            - name: PHI_THRESHOLD
+              value: {{ .Values.zk.phiThreshold | quote }}
+            # SPIRE
+            {{- if .Values.spire.enabled }}
+            - name: SPIRE_SOCKET
+              value: {{ .Values.spire.socketPath | quote }}
+            {{- end }}
+          volumeMounts:
+            - name: rsfs-config
+              mountPath: /etc/rsfs
+              readOnly: true
+            {{- if .Values.storage.glass.enabled }}
+            - name: glass-storage
+              mountPath: {{ .Values.storage.glass.mountPath }}
+            {{- end }}
+            {{- if .Values.spire.enabled }}
+            - name: spire-socket
+              mountPath: /run/spire/sockets
+              readOnly: true
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.rsfs.swarmcore.resources | nindent 12 }}
+      volumes:
+        - name: rsfs-config
+          configMap:
+            name: {{ include "agent-zero.fullname" . }}-rsfs-config
+        {{- if .Values.storage.glass.enabled }}
+        - name: glass-storage
+          persistentVolumeClaim:
+            claimName: {{ include "agent-zero.fullname" . }}-glass
+        {{- end }}
+        {{- if .Values.spire.enabled }}
+        - name: spire-socket
+          hostPath:
+            path: {{ .Values.spire.socketPath | dir }}
+            type: DirectoryOrCreate
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-swarmcore
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: swarmcore
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: http
+      protocol: TCP
+      name: http
+    - port: 9090
+      targetPort: grpc
+      protocol: TCP
+      name: grpc
+    - port: 9091
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "agent-zero.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: swarmcore
+---
+# =============================================================================
+# Trading Attestation CronJob
+# Periodic attestation of trading activity with ZK proofs
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-trading-attestation
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: trading-attestation
+    dd7.ai/module: rsfs
+spec:
+  schedule: {{ .Values.rsfs.attestation.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 24
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "agent-zero.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: trading-attestation
+          annotations:
+            dd7.ai/proof-type: "trading-attestation"
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "agent-zero.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          containers:
+            - name: attestor
+              image: "{{ .Values.rsfs.attestation.image.repository }}:{{ .Values.rsfs.attestation.image.tag }}"
+              imagePullPolicy: {{ .Values.rsfs.attestation.image.pullPolicy }}
+              env:
+                - name: DD7_CLUSTER_ID
+                  value: {{ .Values.attestation.clusterID | quote }}
+                - name: WALLET_ADDRESS
+                  value: {{ .Values.rsfs.wallet.address | quote }}
+                - name: ATTESTATION_TYPE
+                  value: "trading"
+                - name: ZK_PROOF_REQUIRED
+                  value: "true"
+                - name: PHI_THRESHOLD
+                  value: {{ .Values.zk.phiThreshold | quote }}
+              volumeMounts:
+                - name: glass-storage
+                  mountPath: {{ .Values.storage.glass.mountPath }}
+              resources:
+                requests:
+                  cpu: 200m
+                  memory: 512Mi
+                limits:
+                  cpu: 1000m
+                  memory: 2Gi
+          volumes:
+            - name: glass-storage
+              persistentVolumeClaim:
+                claimName: {{ include "agent-zero.fullname" . }}-glass
+---
+# =============================================================================
+# Quantum Protocol Verifier CronJob
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-quantum-verifier
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: quantum-verifier
+    dd7.ai/module: rsfs
+spec:
+  schedule: {{ .Values.rsfs.quantum.verificationSchedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 24
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "agent-zero.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: quantum-verifier
+          annotations:
+            dd7.ai/proof-type: "quantum-verification"
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "agent-zero.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          containers:
+            - name: quantum-verifier
+              image: "{{ .Values.rsfs.quantum.image.repository }}:{{ .Values.rsfs.quantum.image.tag }}"
+              imagePullPolicy: {{ .Values.rsfs.quantum.image.pullPolicy }}
+              env:
+                - name: DD7_CLUSTER_ID
+                  value: {{ .Values.attestation.clusterID | quote }}
+                - name: QUANTUM_PROTOCOL
+                  value: {{ .Values.rsfs.quantum.protocol | quote }}
+                - name: ENTANGLEMENT_DEPTH
+                  value: {{ .Values.rsfs.quantum.entanglementDepth | quote }}
+                - name: VERIFICATION_MODE
+                  value: "full"
+                - name: ZK_CIRCUIT
+                  value: "quantum"
+              volumeMounts:
+                - name: glass-storage
+                  mountPath: {{ .Values.storage.glass.mountPath }}
+              resources:
+                requests:
+                  cpu: 500m
+                  memory: 1Gi
+                limits:
+                  cpu: 2000m
+                  memory: 4Gi
+          volumes:
+            - name: glass-storage
+              persistentVolumeClaim:
+                claimName: {{ include "agent-zero.fullname" . }}-glass
+---
+# =============================================================================
+# Wallet Binding Attestation CronJob
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-wallet-binding
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: wallet-binding
+    dd7.ai/module: rsfs
+spec:
+  schedule: {{ .Values.rsfs.wallet.bindingSchedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 48
+  failedJobsHistoryLimit: 5
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "agent-zero.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: wallet-binding
+          annotations:
+            dd7.ai/proof-type: "wallet-binding"
+            dd7.ai/wallet: {{ .Values.rsfs.wallet.address | quote }}
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "agent-zero.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          containers:
+            - name: wallet-binder
+              image: "{{ .Values.rsfs.wallet.image.repository }}:{{ .Values.rsfs.wallet.image.tag }}"
+              imagePullPolicy: {{ .Values.rsfs.wallet.image.pullPolicy }}
+              env:
+                - name: DD7_CLUSTER_ID
+                  value: {{ .Values.attestation.clusterID | quote }}
+                - name: WALLET_ADDRESS
+                  value: {{ .Values.rsfs.wallet.address | quote }}
+                - name: WALLET_CHAIN
+                  value: {{ .Values.rsfs.wallet.chain | quote }}
+                - name: BIND_TO_TPM
+                  value: {{ .Values.hardware.tpm.enabled | quote }}
+                - name: BIND_TO_SGX
+                  value: {{ .Values.hardware.sgx.enabled | quote }}
+                - name: ZK_CIRCUIT
+                  value: "wallet-binding"
+                {{- if .Values.hardware.tpm.enabled }}
+                - name: TPM_DEVICE
+                  value: {{ .Values.hardware.tpm.devicePath | quote }}
+                {{- end }}
+              volumeMounts:
+                - name: glass-storage
+                  mountPath: {{ .Values.storage.glass.mountPath }}
+                {{- if .Values.hardware.tpm.enabled }}
+                - name: tpm-device
+                  mountPath: {{ .Values.hardware.tpm.devicePath }}
+                {{- end }}
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 1Gi
+          volumes:
+            - name: glass-storage
+              persistentVolumeClaim:
+                claimName: {{ include "agent-zero.fullname" . }}-glass
+            {{- if .Values.hardware.tpm.enabled }}
+            - name: tpm-device
+              hostPath:
+                path: {{ .Values.hardware.tpm.devicePath }}
+                type: CharDevice
+            {{- end }}
+{{- end }}

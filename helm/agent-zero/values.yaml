@@ -352,3 +352,65 @@ storage:
     storageClass: ""
     accessMode: ReadWriteOnce
     mountPath: /glass
+
+# =============================================================================
+# RSFS Ultra SwarmCore Integration
+# Sovereign trading attestation with quantum protocol verification
+# =============================================================================
+
+rsfs:
+  enabled: true
+
+  # SwarmCore controller configuration
+  swarmcore:
+    version: "13.607x"
+    mode: "production"
+    replicas: 1
+    image:
+      repository: rsfs/swarmcore
+      tag: "13.607x"
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+
+  # Quantum protocol configuration
+  quantum:
+    protocol: "QP-VERIFIED"
+    entanglementDepth: 8
+    verificationSchedule: "*/15 * * * *"  # Every 15 minutes
+    image:
+      repository: rsfs/quantum-verifier
+      tag: "latest"
+      pullPolicy: IfNotPresent
+
+  # Wallet binding configuration
+  wallet:
+    # Primary wallet address (Solana)
+    address: "8B9K12f3W9qcSZkUptiC7hwAjut6WFJ2cPjQ3ikTAAP2"
+    chain: "solana"
+    bindingSchedule: "0 */2 * * *"  # Every 2 hours
+    # Secret containing wallet keypair (use sealed-secrets in production)
+    keypairSecret: ""
+    image:
+      repository: rsfs/wallet-binder
+      tag: "latest"
+      pullPolicy: IfNotPresent
+
+  # Trading parameters
+  trading:
+    maxSlippage: 0.5
+    riskThreshold: 0.1
+
+  # Trading attestation configuration
+  attestation:
+    interval: "1h"
+    schedule: "0 * * * *"  # Every hour
+    image:
+      repository: rsfs/trading-attestor
+      tag: "latest"
+      pullPolicy: IfNotPresent
