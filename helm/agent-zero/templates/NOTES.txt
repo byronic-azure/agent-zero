@@ -30,4 +30,68 @@
    - Set them via secrets in values.yaml
    - Use the web UI settings panel after deployment
 
+{{- if .Values.attestation.enabled }}
+
+4. DD7 Attestation Framework is ENABLED
+
+   Cluster ID: {{ .Values.attestation.clusterID }}
+   Persona: {{ .Values.persona.default }}
+   Air-Gapped: {{ .Values.attestation.airGapped }}
+
+   Components deployed:
+   {{- if .Values.attestation.enabled }}
+   - dd7-attestor (DaemonSet): TPM + SGX node attestation
+   {{- end }}
+   {{- if .Values.zk.enabled }}
+   - zk-prover (CronJob): ZK proofs every hour
+   - zk-aggregator (CronJob): Merkle root aggregation
+   {{- end }}
+   {{- if .Values.ledgerAudit.enabled }}
+   - ledger-audit (CronJob): Integrity verification
+   {{- end }}
+   {{- if .Values.anchors.ethereum.enabled }}
+   - anchor-eth (CronJob): Ethereum blockchain anchoring
+   {{- end }}
+   {{- if .Values.anchors.solana.enabled }}
+   - anchor-sol (CronJob): Solana blockchain anchoring
+   {{- end }}
+   {{- if .Values.evidencePack.enabled }}
+   - evidence-pack (CronJob): Regulator evidence generation
+   {{- end }}
+   {{- if .Values.verifier.enabled }}
+   - verifier (Deployment): External audit verification
+   {{- end }}
+
+   ZK Configuration:
+   - Phi Threshold: {{ .Values.zk.phiThreshold }}
+   - Uptime Target: {{ .Values.zk.uptimeTarget }}
+   - Drift Max: {{ .Values.zk.driftMax }}
+
+{{- if .Values.verifier.enabled }}
+
+5. External Verifier Service:
+   kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "agent-zero.fullname" . }}-verifier 8443:{{ .Values.verifier.service.port }}
+   Access at: https://127.0.0.1:8443
+{{- end }}
+
+{{- if .Values.anchors.ethereum.enabled }}
+
+6. Ethereum Anchor Prerequisites:
+   Create secret for Ethereum RPC:
+   kubectl create secret generic {{ .Values.anchors.ethereum.rpcSecret }} \
+     --from-literal=rpc-url=YOUR_ETH_RPC_URL \
+     --from-literal=private-key=YOUR_PRIVATE_KEY
+{{- end }}
+
+{{- if .Values.anchors.solana.enabled }}
+
+7. Solana Anchor Prerequisites:
+   Create secret for Solana RPC:
+   kubectl create secret generic {{ .Values.anchors.solana.rpcSecret }} \
+     --from-literal=rpc-url=YOUR_SOL_RPC_URL \
+     --from-literal=private-key=YOUR_PRIVATE_KEY
+{{- end }}
+
+{{- end }}
+
 For more information, visit: https://github.com/frdel/agent-zero

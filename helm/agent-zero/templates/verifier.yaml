@@ -1,0 +1,129 @@
+{{- if .Values.verifier.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-verifier
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: verifier
+spec:
+  replicas: {{ .Values.verifier.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "agent-zero.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: verifier
+  template:
+    metadata:
+      labels:
+        {{- include "agent-zero.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: verifier
+      annotations:
+        dd7.ai/role: "external-verifier"
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "agent-zero.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: verifier
+          image: "{{ .Values.verifier.image.repository }}:{{ .Values.verifier.image.tag }}"
+          imagePullPolicy: {{ .Values.verifier.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: https
+              containerPort: 8443
+              protocol: TCP
+          env:
+            - name: DD7_CLUSTER_ID
+              value: {{ .Values.attestation.clusterID | quote }}
+            - name: DD7_PERSONA
+              value: {{ .Values.persona.default | quote }}
+            - name: DD7_PHI_THRESHOLD
+              value: {{ .Values.zk.phiThreshold | quote }}
+            - name: DD7_UPTIME_TARGET
+              value: {{ .Values.zk.uptimeTarget | quote }}
+            {{- if .Values.anchors.ethereum.enabled }}
+            - name: ETH_CONTRACT
+              value: {{ .Values.anchors.ethereum.contract | quote }}
+            {{- end }}
+            {{- if .Values.anchors.solana.enabled }}
+            - name: SOL_PROGRAM
+              value: {{ .Values.anchors.solana.program | quote }}
+            {{- end }}
+            {{- if .Values.spire.enabled }}
+            - name: SPIRE_TRUST_DOMAIN
+              value: {{ .Values.spire.trustDomain | quote }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: https
+              scheme: HTTPS
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: https
+              scheme: HTTPS
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            {{- if .Values.storage.glass.enabled }}
+            - name: glass-storage
+              mountPath: {{ .Values.storage.glass.mountPath }}
+              readOnly: true
+            {{- end }}
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            {{- toYaml .Values.verifier.resources | nindent 12 }}
+      volumes:
+        {{- if .Values.storage.glass.enabled }}
+        - name: glass-storage
+          persistentVolumeClaim:
+            claimName: {{ include "agent-zero.fullname" . }}-glass
+        {{- end }}
+        - name: tmp
+          emptyDir: {}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-verifier
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: verifier
+spec:
+  type: {{ .Values.verifier.service.type }}
+  ports:
+    - port: {{ .Values.verifier.service.port }}
+      targetPort: https
+      protocol: TCP
+      name: https
+  selector:
+    {{- include "agent-zero.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: verifier
+{{- end }}

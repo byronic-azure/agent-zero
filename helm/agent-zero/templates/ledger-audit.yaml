@@ -1,0 +1,81 @@
+{{- if .Values.ledgerAudit.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-ledger-audit
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: ledger-audit
+spec:
+  schedule: {{ .Values.ledgerAudit.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "agent-zero.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: ledger-audit
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "agent-zero.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          containers:
+            - name: ledger-audit
+              image: "{{ .Values.ledgerAudit.image.repository }}:{{ .Values.ledgerAudit.image.tag }}"
+              imagePullPolicy: {{ .Values.ledgerAudit.image.pullPolicy }}
+              env:
+                - name: DD7_CLUSTER_ID
+                  value: {{ .Values.attestation.clusterID | quote }}
+                - name: DD7_PERSONA
+                  value: {{ .Values.persona.default | quote }}
+                - name: DD7_PHI_THRESHOLD
+                  value: {{ .Values.zk.phiThreshold | quote }}
+                - name: DD7_UPTIME_TARGET
+                  value: {{ .Values.zk.uptimeTarget | quote }}
+                {{- if .Values.anchors.ethereum.enabled }}
+                - name: ETH_CONTRACT
+                  value: {{ .Values.anchors.ethereum.contract | quote }}
+                {{- end }}
+                {{- if .Values.anchors.solana.enabled }}
+                - name: SOL_PROGRAM
+                  value: {{ .Values.anchors.solana.program | quote }}
+                {{- end }}
+              volumeMounts:
+                {{- if .Values.storage.glass.enabled }}
+                - name: glass-storage
+                  mountPath: {{ .Values.storage.glass.mountPath }}
+                {{- end }}
+                {{- if .Values.persistence.enabled }}
+                - name: data
+                  mountPath: {{ .Values.persistence.mountPath }}
+                  readOnly: true
+                {{- end }}
+              resources:
+                {{- toYaml .Values.ledgerAudit.resources | nindent 16 }}
+          volumes:
+            {{- if .Values.storage.glass.enabled }}
+            - name: glass-storage
+              persistentVolumeClaim:
+                claimName: {{ include "agent-zero.fullname" . }}-glass
+            {{- end }}
+            {{- if .Values.persistence.enabled }}
+            - name: data
+              persistentVolumeClaim:
+                claimName: {{ if .Values.persistence.existingClaim }}{{ .Values.persistence.existingClaim }}{{ else }}{{ include "agent-zero.fullname" . }}-data{{ end }}
+            {{- end }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

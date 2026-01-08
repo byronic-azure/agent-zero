@@ -1,0 +1,82 @@
+{{- if .Values.zk.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-zk-prover
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: zk-prover
+spec:
+  schedule: {{ .Values.zk.prover.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            {{- include "agent-zero.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: zk-prover
+          annotations:
+            dd7.ai/phi-threshold: {{ .Values.zk.phiThreshold | quote }}
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "agent-zero.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          containers:
+            - name: zk-prover
+              image: "{{ .Values.zk.prover.image.repository }}:{{ .Values.zk.prover.image.tag }}"
+              imagePullPolicy: {{ .Values.zk.prover.image.pullPolicy }}
+              env:
+                - name: DD7_PHI_THRESHOLD
+                  value: {{ .Values.zk.phiThreshold | quote }}
+                - name: DD7_UPTIME_TARGET
+                  value: {{ .Values.zk.uptimeTarget | quote }}
+                - name: DD7_DRIFT_MAX
+                  value: {{ .Values.zk.driftMax | quote }}
+                - name: DD7_CLUSTER_ID
+                  value: {{ .Values.attestation.clusterID | quote }}
+                - name: DD7_PERSONA
+                  value: {{ .Values.persona.default | quote }}
+                {{- if .Values.spire.enabled }}
+                - name: SPIRE_TRUST_DOMAIN
+                  value: {{ .Values.spire.trustDomain | quote }}
+                {{- end }}
+              volumeMounts:
+                {{- if .Values.storage.glass.enabled }}
+                - name: glass-storage
+                  mountPath: {{ .Values.storage.glass.mountPath }}
+                {{- end }}
+                {{- if .Values.spire.enabled }}
+                - name: spire-socket
+                  mountPath: /run/spire/sockets
+                  readOnly: true
+                {{- end }}
+              resources:
+                {{- toYaml .Values.zk.prover.resources | nindent 16 }}
+          volumes:
+            {{- if .Values.storage.glass.enabled }}
+            - name: glass-storage
+              persistentVolumeClaim:
+                claimName: {{ include "agent-zero.fullname" . }}-glass
+            {{- end }}
+            {{- if .Values.spire.enabled }}
+            - name: spire-socket
+              hostPath:
+                path: {{ .Values.spire.socketPath | dir }}
+                type: DirectoryOrCreate
+            {{- end }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

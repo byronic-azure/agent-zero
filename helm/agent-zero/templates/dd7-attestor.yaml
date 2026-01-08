@@ -1,0 +1,113 @@
+{{- if .Values.attestation.enabled }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-dd7-attestor
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: attestor
+spec:
+  selector:
+    matchLabels:
+      {{- include "agent-zero.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: attestor
+  template:
+    metadata:
+      labels:
+        {{- include "agent-zero.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: attestor
+      annotations:
+        dd7.ai/cluster-id: {{ .Values.attestation.clusterID | quote }}
+        dd7.ai/air-gapped: {{ .Values.attestation.airGapped | quote }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "agent-zero.serviceAccountName" . }}
+      hostPID: true
+      containers:
+        - name: attestor
+          image: "{{ .Values.attestation.image.repository }}:{{ .Values.attestation.image.tag }}"
+          imagePullPolicy: {{ .Values.attestation.image.pullPolicy }}
+          securityContext:
+            privileged: true
+            capabilities:
+              add:
+                - SYS_ADMIN
+                - SYS_RAWIO
+          env:
+            - name: DD7_CLUSTER_ID
+              value: {{ .Values.attestation.clusterID | quote }}
+            - name: DD7_AIR_GAPPED
+              value: {{ .Values.attestation.airGapped | quote }}
+            - name: DD7_PERSONA
+              value: {{ .Values.persona.default | quote }}
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            {{- if .Values.spire.enabled }}
+            - name: SPIRE_TRUST_DOMAIN
+              value: {{ .Values.spire.trustDomain | quote }}
+            - name: SPIRE_SERVER_ADDRESS
+              value: {{ .Values.spire.serverAddress | quote }}
+            {{- end }}
+          volumeMounts:
+            {{- if .Values.hardware.tpm.enabled }}
+            - name: tpm-device
+              mountPath: {{ .Values.hardware.tpm.devicePath }}
+            {{- end }}
+            {{- if .Values.hardware.sgx.enabled }}
+            - name: sgx-device
+              mountPath: {{ .Values.hardware.sgx.devicePath }}
+            {{- end }}
+            {{- if .Values.spire.enabled }}
+            - name: spire-socket
+              mountPath: /run/spire/sockets
+              readOnly: true
+            {{- end }}
+            {{- if .Values.storage.glass.enabled }}
+            - name: glass-storage
+              mountPath: {{ .Values.storage.glass.mountPath }}
+            {{- end }}
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        {{- if .Values.hardware.tpm.enabled }}
+        - name: tpm-device
+          hostPath:
+            path: {{ .Values.hardware.tpm.devicePath }}
+            type: CharDevice
+        {{- end }}
+        {{- if .Values.hardware.sgx.enabled }}
+        - name: sgx-device
+          hostPath:
+            path: {{ .Values.hardware.sgx.devicePath }}
+            type: CharDevice
+        {{- end }}
+        {{- if .Values.spire.enabled }}
+        - name: spire-socket
+          hostPath:
+            path: {{ .Values.spire.socketPath | dir }}
+            type: DirectoryOrCreate
+        {{- end }}
+        {{- if .Values.storage.glass.enabled }}
+        - name: glass-storage
+          persistentVolumeClaim:
+            claimName: {{ include "agent-zero.fullname" . }}-glass
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

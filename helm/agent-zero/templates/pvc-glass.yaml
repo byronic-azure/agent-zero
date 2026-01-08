@@ -1,0 +1,21 @@
+{{- if .Values.storage.glass.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-glass
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: storage
+  annotations:
+    dd7.ai/storage-type: "glass"
+    dd7.ai/immutable: "true"
+spec:
+  accessModes:
+    - {{ .Values.storage.glass.accessMode }}
+  {{- if .Values.storage.glass.storageClass }}
+  storageClassName: {{ .Values.storage.glass.storageClass }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.storage.glass.size }}
+{{- end }}

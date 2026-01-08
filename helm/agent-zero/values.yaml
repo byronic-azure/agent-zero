@@ -175,3 +175,178 @@ initContainers: []
 
 # Sidecar containers
 sidecars: []
+
+# =============================================================================
+# DD7 Attestation & Integrity Framework
+# =============================================================================
+
+# Attestation configuration
+attestation:
+  enabled: true
+  clusterID: "iverse-genesis-prime"
+  airGapped: true
+  image:
+    repository: dd7ai/attestor
+    tag: "latest"
+    pullPolicy: IfNotPresent
+
+# Hardware security module configuration
+hardware:
+  tpm:
+    enabled: true
+    devicePath: /dev/tpmrm0
+  sgx:
+    enabled: true
+    devicePath: /dev/sgx_enclave
+
+# Persona-based policy configuration
+persona:
+  default: AUTHORITY
+  policies:
+    stealth:
+      anchorFrequency: daily
+      disclosure: zk-only
+    authority:
+      anchorFrequency: hourly
+      disclosure: phi-sla
+    lab:
+      anchorFrequency: manual
+      disclosure: raw-hash
+
+# Zero-knowledge proof configuration
+zk:
+  enabled: true
+  phiThreshold: 0.77
+  uptimeTarget: 0.9999999997
+  driftMax: 0.00000001
+  prover:
+    image:
+      repository: dd7ai/zk-prover
+      tag: "latest"
+      pullPolicy: IfNotPresent
+    schedule: "0 * * * *"  # Every hour
+    resources:
+      requests:
+        cpu: 500m
+        memory: 1Gi
+      limits:
+        cpu: 2000m
+        memory: 4Gi
+  aggregator:
+    image:
+      repository: dd7ai/zk-aggregator
+      tag: "latest"
+      pullPolicy: IfNotPresent
+    schedule: "30 * * * *"  # 30 min past every hour
+    resources:
+      requests:
+        cpu: 250m
+        memory: 512Mi
+      limits:
+        cpu: 1000m
+        memory: 2Gi
+
+# Blockchain anchor configuration
+anchors:
+  ethereum:
+    enabled: true
+    schedule: "0 * * * *"  # Every hour
+    contract: "0xDD7Anchor..."
+    rpcSecret: eth-rpc
+    image:
+      repository: dd7ai/anchor-eth
+      tag: "latest"
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  solana:
+    enabled: true
+    schedule: "5 * * * *"  # 5 min past every hour
+    program: "DD7SolAnchor"
+    rpcSecret: sol-rpc
+    image:
+      repository: dd7ai/anchor-sol
+      tag: "latest"
+      pullPolicy: IfNotPresent
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+
+# Ledger audit configuration
+ledgerAudit:
+  enabled: true
+  schedule: "15 * * * *"  # 15 min past every hour
+  image:
+    repository: dd7ai/ledger-audit
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+# Evidence pack generation for regulators
+evidencePack:
+  enabled: true
+  schedule: "0 0 * * *"  # Daily at midnight
+  image:
+    repository: dd7ai/evidence-pack
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  formats:
+    - pdf
+    - json
+  resources:
+    requests:
+      cpu: 250m
+      memory: 512Mi
+    limits:
+      cpu: 1000m
+      memory: 2Gi
+
+# External verifier deployment
+verifier:
+  enabled: true
+  replicaCount: 1
+  image:
+    repository: dd7ai/verifier
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 8443
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+# SPIRE integration for workload identity
+spire:
+  enabled: true
+  trustDomain: "dd7.ai"
+  serverAddress: "spire-server.spire:8081"
+  socketPath: /run/spire/sockets/agent.sock
+
+# Glass storage for immutable audit logs
+storage:
+  glass:
+    enabled: true
+    size: 50Gi
+    storageClass: ""
+    accessMode: ReadWriteOnce
+    mountPath: /glass
