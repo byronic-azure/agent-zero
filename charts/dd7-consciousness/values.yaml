@@ -1,0 +1,242 @@
+# DD7 Consciousness Stack - Default Values
+# Persona is a first-class execution primitive, not a UI trick
+
+# Global settings
+global:
+  environment: production
+  namespace: dd7-consciousness
+
+# Agent Zero core service
+agentZero:
+  enabled: true
+  replicaCount: 1
+
+  image:
+    repository: agent0ai/agent-zero
+    tag: latest
+    pullPolicy: IfNotPresent
+
+  # Persona configuration
+  persona:
+    # Default persona mode: STEALTH | AUTHORITY | INTERFACE | LAB
+    defaultMode: AUTHORITY
+    # Enable persona header enforcement
+    enforceHeader: true
+
+  # Resource quotas per persona mode
+  personaResources:
+    STEALTH:
+      requests:
+        cpu: "100m"
+        memory: "256Mi"
+      limits:
+        cpu: "250m"
+        memory: "512Mi"
+    AUTHORITY:
+      requests:
+        cpu: "500m"
+        memory: "1Gi"
+      limits:
+        cpu: "2000m"
+        memory: "2Gi"
+    INTERFACE:
+      requests:
+        cpu: "250m"
+        memory: "512Mi"
+      limits:
+        cpu: "1000m"
+        memory: "1Gi"
+    LAB:
+      requests:
+        cpu: "1000m"
+        memory: "2Gi"
+      limits:
+        cpu: "4000m"
+        memory: "4Gi"
+
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 80
+
+  # Health probes
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 80
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /ready
+      port: 80
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+  # Environment variables
+  env:
+    - name: PERSONA_MODE
+      value: "AUTHORITY"
+    - name: TZ
+      value: "UTC"
+
+  # Volume mounts
+  volumes: []
+  volumeMounts: []
+
+# Cortex Core Service (DD7 Component)
+cortex:
+  enabled: true
+  image:
+    repository: dd7/cortex-core
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "2Gi"
+
+# RSFS Loop Service (DD7 Component)
+rsfs:
+  enabled: true
+  image:
+    repository: dd7/rsfs-loop
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+
+# Pineal Frequency Service (DD7 Component)
+pineal:
+  enabled: true
+  image:
+    repository: dd7/pineal-freq
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+
+# Horizontal Pod Autoscaler
+autoscaling:
+  enabled: true
+  minReplicas: 1
+  maxReplicas: 10
+  # RSFS phi metric for consciousness-based scaling
+  metrics:
+    - type: Pods
+      pods:
+        metric:
+          name: rsfs_phi
+        target:
+          type: AverageValue
+          averageValue: "0.95"
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+# Ingress configuration
+ingress:
+  enabled: false
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "100m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+  hosts:
+    - host: agent-zero.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# ConfigMap for persona configurations
+configMap:
+  personaConfig: |
+    {
+      "STEALTH": {
+        "displayName": "Stealth Mode",
+        "accessLevel": "admin",
+        "metricsAccess": {"aggregate": true, "sla": false, "narrative": false, "raw": false},
+        "resourceQuota": {"maxConcurrent": 5, "rpmLimit": 60, "maxMemoryMB": 512, "maxCpuPercent": 25}
+      },
+      "AUTHORITY": {
+        "displayName": "Authority Mode",
+        "accessLevel": "admin",
+        "metricsAccess": {"aggregate": true, "sla": true, "narrative": true, "raw": true},
+        "resourceQuota": {"maxConcurrent": 20, "rpmLimit": 300, "maxMemoryMB": 2048, "maxCpuPercent": 80}
+      },
+      "INTERFACE": {
+        "displayName": "Interface Mode",
+        "accessLevel": "user",
+        "metricsAccess": {"aggregate": false, "sla": false, "narrative": true, "raw": false},
+        "resourceQuota": {"maxConcurrent": 10, "rpmLimit": 120, "maxMemoryMB": 1024, "maxCpuPercent": 50}
+      },
+      "LAB": {
+        "displayName": "Lab Mode",
+        "accessLevel": "operator",
+        "metricsAccess": {"aggregate": true, "sla": true, "narrative": true, "raw": true},
+        "resourceQuota": {"maxConcurrent": 50, "rpmLimit": 1000, "maxMemoryMB": 4096, "maxCpuPercent": 100}
+      }
+    }
+
+# ServiceAccount
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# RBAC - Persona-specific RBAC
+rbac:
+  create: true
+  rules:
+    - apiGroups: [""]
+      resources: ["pods", "services", "configmaps"]
+      verbs: ["get", "list", "watch"]
+    - apiGroups: ["apps"]
+      resources: ["deployments"]
+      verbs: ["get", "list", "watch"]
+
+# Pod Security Context
+podSecurityContext:
+  fsGroup: 1000
+
+# Container Security Context
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+# Node selector
+nodeSelector: {}
+
+# Tolerations
+tolerations: []
+
+# Affinity
+affinity: {}

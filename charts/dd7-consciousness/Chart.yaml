@@ -1,0 +1,15 @@
+apiVersion: v2
+name: dd7-consciousness
+description: Agent Zero with DD7 Consciousness Stack - Persona-gated execution primitives
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - agent-zero
+  - consciousness
+  - persona
+  - ai-agent
+maintainers:
+  - name: DD7 Team
+    email: dd7@example.com
+dependencies: []

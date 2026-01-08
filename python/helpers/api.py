@@ -39,6 +39,16 @@ class ApiHandler:
     def requires_csrf(cls) -> bool:
         return cls.requires_auth()
 
+    @classmethod
+    def requires_persona_gate(cls) -> bool:
+        """Override to True to enable persona-based access control"""
+        return False
+
+    @classmethod
+    def allowed_personas(cls) -> list[str]:
+        """Override to restrict which personas can access this endpoint"""
+        return []  # Empty = all personas allowed
+
     @abstractmethod
     async def process(self, input: Input, request: Request) -> Output:
         pass

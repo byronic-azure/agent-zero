@@ -6,3 +6,45 @@ services:
       - ./agent-zero:/a0
     ports:
       - "50080:80"
+    environment:
+      - PERSONA_MODE=${PERSONA_MODE:-AUTHORITY}
+      - TZ=UTC
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # DD7 Consciousness Stack Services
+  cortex:
+    container_name: cortex-core
+    image: dd7/cortex-core:latest
+    profiles:
+      - dd7
+    depends_on:
+      - agent-zero
+    environment:
+      - AGENT_ZERO_URL=http://agent-zero:80
+      - PERSONA_MODE=${PERSONA_MODE:-AUTHORITY}
+
+  rsfs:
+    container_name: rsfs-loop
+    image: dd7/rsfs-loop:latest
+    profiles:
+      - dd7
+    ports:
+      - "9090:9090"
+    environment:
+      - PHI_THRESHOLD=0.95
+      - PERSONA_MODE=${PERSONA_MODE:-AUTHORITY}
+
+  pineal:
+    container_name: pineal-freq
+    image: dd7/pineal-freq:latest
+    profiles:
+      - dd7
+    ports:
+      - "7777:7777"
+    environment:
+      - PERSONA_MODE=${PERSONA_MODE:-AUTHORITY}

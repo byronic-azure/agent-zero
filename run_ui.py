@@ -18,6 +18,15 @@ from python.helpers.extract_tools import load_classes_from_folder
 from python.helpers.api import ApiHandler
 from python.helpers.print_style import PrintStyle
 from python.helpers import login
+from python.helpers.persona_manager import (
+    PersonaMode,
+    parse_persona_mode,
+    get_persona_config,
+    create_persona_context,
+    check_endpoint_access,
+    persona_mode_emitter,
+    get_metrics_for_persona,
+)
 
 # disable logging
 import logging
@@ -146,6 +155,134 @@ def csrf_protect(f):
 
     return decorated
 
+
+# Persona gating decorator - extracts persona from X-Persona-Mode header
+def requires_persona(*allowed_modes: PersonaMode):
+    """
+    Decorator factory for endpoint-level persona access control.
+
+    Usage:
+        @requires_persona(PersonaMode.AUTHORITY, PersonaMode.STEALTH)
+        async def admin_endpoint():
+            ...
+    """
+    def decorator(f):
+        @wraps(f)
+        async def decorated(*args, **kwargs):
+            header_value = request.headers.get("X-Persona-Mode", "AUTHORITY")
+            current_mode = parse_persona_mode(header_value)
+
+            if current_mode not in allowed_modes:
+                return Response(
+                    f'{{"error": "Persona access denied", "message": "Endpoint requires persona: {" | ".join(m.value for m in allowed_modes)}", "current_persona": "{current_mode.value}"}}',
+                    403,
+                    {"Content-Type": "application/json"},
+                )
+
+            return await f(*args, **kwargs)
+
+        return decorated
+    return decorator
+
+
+def persona_gate(f):
+    """
+    Decorator that extracts persona mode from headers and attaches to request context.
+    Also enforces endpoint access based on persona configuration.
+    """
+    @wraps(f)
+    async def decorated(*args, **kwargs):
+        from flask import g
+
+        header_value = request.headers.get("X-Persona-Mode", "AUTHORITY")
+        persona = parse_persona_mode(header_value)
+        config = get_persona_config(persona)
+
+        # Store in flask.g for access in handlers
+        g.persona = persona
+        g.persona_config = config
+        g.persona_context = create_persona_context(
+            mode=persona,
+            user_id=session.get("user_id"),
+            session_id=request.cookies.get("session_id", ""),
+        )
+
+        # Emit mode change event
+        persona_mode_emitter.set_mode(persona, g.persona_context)
+
+        # Check endpoint access based on persona config
+        allowed, reason = check_endpoint_access(request.path, config)
+        if not allowed:
+            return Response(
+                f'{{"error": "{reason}", "persona": "{config.mode.value}", "endpoint": "{request.path}"}}',
+                403,
+                {"Content-Type": "application/json"},
+            )
+
+        return await f(*args, **kwargs)
+
+    return decorated
+
+# Health and readiness probes for Kubernetes
+@webapp.route("/health", methods=["GET"])
+async def health_check():
+    """Liveness probe - returns 200 if the service is running"""
+    return Response(
+        '{"status": "healthy", "service": "agent-zero"}',
+        200,
+        {"Content-Type": "application/json"},
+    )
+
+
+@webapp.route("/ready", methods=["GET"])
+async def readiness_check():
+    """Readiness probe - returns 200 if the service is ready to accept traffic"""
+    # Check if initialization is complete
+    try:
+        from agent import AgentContext
+        # Simple check - if we can get contexts, we're ready
+        ready = True
+    except Exception:
+        ready = False
+
+    if ready:
+        return Response(
+            '{"status": "ready", "service": "agent-zero"}',
+            200,
+            {"Content-Type": "application/json"},
+        )
+    else:
+        return Response(
+            '{"status": "not_ready", "service": "agent-zero"}',
+            503,
+            {"Content-Type": "application/json"},
+        )
+
+
+# Metrics endpoint with persona-specific responses
+@webapp.route("/metrics", methods=["GET"])
+@persona_gate
+async def metrics_endpoint():
+    """
+    Returns metrics based on the current persona mode:
+    - STEALTH: Aggregate metrics only
+    - AUTHORITY: SLA-focused metrics
+    - INTERFACE: Narrative/user-friendly metrics
+    - LAB: Raw metrics with full detail
+    """
+    from flask import g
+    import json
+
+    persona = getattr(g, "persona", PersonaMode.AUTHORITY)
+    metrics = get_metrics_for_persona(persona)
+
+    return Response(
+        json.dumps(metrics),
+        200,
+        {"Content-Type": "application/json"},
+    )
+
+
 @webapp.route("/login", methods=["GET", "POST"])
 async def login_handler():
     error = None
@@ -224,6 +361,9 @@ def run():
             handler_wrap = requires_api_key(handler_wrap)
         if handler.requires_csrf():
             handler_wrap = csrf_protect(handler_wrap)
+        # Apply persona gating to all API handlers
+        if handler.requires_persona_gate():
+            handler_wrap = persona_gate(handler_wrap)
 
         app.add_url_rule(
             f"/{name}",

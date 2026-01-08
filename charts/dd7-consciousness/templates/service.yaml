@@ -1,0 +1,79 @@
+{{- if .Values.agentZero.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dd7-consciousness.fullname" . }}-agent-zero
+  labels:
+    {{- include "dd7-consciousness.labels" . | nindent 4 }}
+    component: agent-zero
+spec:
+  type: {{ .Values.agentZero.service.type }}
+  ports:
+    - port: {{ .Values.agentZero.service.port }}
+      targetPort: {{ .Values.agentZero.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "dd7-consciousness.selectorLabels" . | nindent 4 }}
+    component: agent-zero
+{{- end }}
+---
+{{- if .Values.cortex.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dd7-consciousness.fullname" . }}-cortex
+  labels:
+    {{- include "dd7-consciousness.labels" . | nindent 4 }}
+    component: cortex
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      targetPort: 8080
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "dd7-consciousness.selectorLabels" . | nindent 4 }}
+    component: cortex
+{{- end }}
+---
+{{- if .Values.rsfs.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dd7-consciousness.fullname" . }}-rsfs
+  labels:
+    {{- include "dd7-consciousness.labels" . | nindent 4 }}
+    component: rsfs
+spec:
+  type: ClusterIP
+  ports:
+    - port: 9090
+      targetPort: 9090
+      protocol: TCP
+      name: metrics
+  selector:
+    {{- include "dd7-consciousness.selectorLabels" . | nindent 4 }}
+    component: rsfs
+{{- end }}
+---
+{{- if .Values.pineal.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "dd7-consciousness.fullname" . }}-pineal
+  labels:
+    {{- include "dd7-consciousness.labels" . | nindent 4 }}
+    component: pineal
+spec:
+  type: ClusterIP
+  ports:
+    - port: 7777
+      targetPort: 7777
+      protocol: TCP
+      name: freq
+  selector:
+    {{- include "dd7-consciousness.selectorLabels" . | nindent 4 }}
+    component: pineal
+{{- end }}

@@ -1,0 +1,164 @@
+{{- if .Values.agentZero.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dd7-consciousness.fullname" . }}-agent-zero
+  labels:
+    {{- include "dd7-consciousness.labels" . | nindent 4 }}
+    component: agent-zero
+spec:
+  replicas: {{ .Values.agentZero.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "dd7-consciousness.selectorLabels" . | nindent 6 }}
+      component: agent-zero
+  template:
+    metadata:
+      labels:
+        {{- include "dd7-consciousness.selectorLabels" . | nindent 8 }}
+        component: agent-zero
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "dd7-consciousness.serviceAccountName" . }}
+      containers:
+        - name: agent-zero
+          image: "{{ .Values.agentZero.image.repository }}:{{ .Values.agentZero.image.tag }}"
+          imagePullPolicy: {{ .Values.agentZero.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.agentZero.service.targetPort }}
+              protocol: TCP
+          {{- with .Values.agentZero.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.agentZero.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            {{- toYaml .Values.agentZero.env | nindent 12 }}
+            - name: PERSONA_CONFIG_PATH
+              value: /config/persona-config.json
+          resources:
+            {{- toYaml (index .Values.agentZero.personaResources .Values.agentZero.persona.defaultMode) | nindent 12 }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          volumeMounts:
+            - name: persona-config
+              mountPath: /config
+              readOnly: true
+            {{- with .Values.agentZero.volumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+      volumes:
+        - name: persona-config
+          configMap:
+            name: {{ include "dd7-consciousness.fullname" . }}-config
+        {{- with .Values.agentZero.volumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}
+---
+{{- if .Values.cortex.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dd7-consciousness.fullname" . }}-cortex
+  labels:
+    {{- include "dd7-consciousness.labels" . | nindent 4 }}
+    component: cortex
+spec:
+  replicas: {{ .Values.cortex.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "dd7-consciousness.selectorLabels" . | nindent 6 }}
+      component: cortex
+  template:
+    metadata:
+      labels:
+        {{- include "dd7-consciousness.selectorLabels" . | nindent 8 }}
+        component: cortex
+    spec:
+      containers:
+        - name: cortex
+          image: "{{ .Values.cortex.image.repository }}:{{ .Values.cortex.image.tag }}"
+          imagePullPolicy: {{ .Values.cortex.image.pullPolicy }}
+          resources:
+            {{- toYaml .Values.cortex.resources | nindent 12 }}
+{{- end }}
+---
+{{- if .Values.rsfs.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dd7-consciousness.fullname" . }}-rsfs
+  labels:
+    {{- include "dd7-consciousness.labels" . | nindent 4 }}
+    component: rsfs
+spec:
+  replicas: {{ .Values.rsfs.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "dd7-consciousness.selectorLabels" . | nindent 6 }}
+      component: rsfs
+  template:
+    metadata:
+      labels:
+        {{- include "dd7-consciousness.selectorLabels" . | nindent 8 }}
+        component: rsfs
+    spec:
+      containers:
+        - name: rsfs
+          image: "{{ .Values.rsfs.image.repository }}:{{ .Values.rsfs.image.tag }}"
+          imagePullPolicy: {{ .Values.rsfs.image.pullPolicy }}
+          resources:
+            {{- toYaml .Values.rsfs.resources | nindent 12 }}
+{{- end }}
+---
+{{- if .Values.pineal.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dd7-consciousness.fullname" . }}-pineal
+  labels:
+    {{- include "dd7-consciousness.labels" . | nindent 4 }}
+    component: pineal
+spec:
+  replicas: {{ .Values.pineal.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "dd7-consciousness.selectorLabels" . | nindent 6 }}
+      component: pineal
+  template:
+    metadata:
+      labels:
+        {{- include "dd7-consciousness.selectorLabels" . | nindent 8 }}
+        component: pineal
+    spec:
+      containers:
+        - name: pineal
+          image: "{{ .Values.pineal.image.repository }}:{{ .Values.pineal.image.tag }}"
+          imagePullPolicy: {{ .Values.pineal.image.pullPolicy }}
+          resources:
+            {{- toYaml .Values.pineal.resources | nindent 12 }}
+{{- end }}

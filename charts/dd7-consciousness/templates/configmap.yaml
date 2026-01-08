@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dd7-consciousness.fullname" . }}-config
+  labels:
+    {{- include "dd7-consciousness.labels" . | nindent 4 }}
+data:
+  persona-config.json: |
+    {{ .Values.configMap.personaConfig | nindent 4 }}
+  default-persona-mode: {{ .Values.agentZero.persona.defaultMode | quote }}
+  enforce-persona-header: {{ .Values.agentZero.persona.enforceHeader | quote }}

@@ -113,6 +113,10 @@ class Settings(TypedDict):
 
     update_check_enabled: bool
 
+    # Persona configuration
+    persona_mode: str  # Current persona mode: STEALTH, AUTHORITY, INTERFACE, LAB
+    persona_config: dict[str, Any]  # Custom persona configuration overrides
+
 class PartialSettings(Settings, total=False):
     pass
 
@@ -1274,6 +1278,46 @@ def convert_out(settings: Settings) -> SettingsOutput:
         "tab": "backup",
     }
 
+    # Persona configuration section
+    persona_fields: list[SettingsField] = []
+    persona_fields.append(
+        {
+            "id": "persona_mode",
+            "title": "Persona Mode",
+            "description": "Select the execution persona mode. This determines access control, metrics visibility, and resource allocation.<br>"
+            "<strong>STEALTH</strong>: Minimal footprint, aggregate-only metrics<br>"
+            "<strong>AUTHORITY</strong>: Full administrative access, SLA-focused metrics<br>"
+            "<strong>INTERFACE</strong>: User-facing presentation, narrative metrics<br>"
+            "<strong>LAB</strong>: Experimental access, raw metrics",
+            "type": "select",
+            "value": settings.get("persona_mode", "AUTHORITY"),
+            "options": [
+                {"value": "STEALTH", "label": "Stealth Mode"},
+                {"value": "AUTHORITY", "label": "Authority Mode"},
+                {"value": "INTERFACE", "label": "Interface Mode"},
+                {"value": "LAB", "label": "Lab Mode"},
+            ],
+        }
+    )
+    persona_fields.append(
+        {
+            "id": "persona_config",
+            "title": "Custom Persona Configuration",
+            "description": "Override default persona settings. Format is KEY=VALUE on individual lines. "
+            "Available keys: max_concurrent_requests, requests_per_minute, max_memory_mb, max_cpu_percent",
+            "type": "textarea",
+            "value": _dict_to_env(settings.get("persona_config", {})),
+        }
+    )
+
+    persona_section: SettingsSection = {
+        "id": "persona",
+        "title": "Persona Mode",
+        "description": "Configure the execution persona mode for access control, metrics visibility, and resource allocation.",
+        "fields": persona_fields,
+        "tab": "advanced",
+    }
+
     # Add the section to the result
     result: SettingsOutput = {
         "sections": [
@@ -1294,6 +1338,7 @@ def convert_out(settings: Settings) -> SettingsOutput:
             external_api_section,
             update_checker_section,
             backup_section,
+            persona_section,
             dev_section,
             # code_exec_section,
         ]
@@ -1533,6 +1578,8 @@ def get_default_settings() -> Settings:
         secrets="",
         litellm_global_kwargs={},
         update_check_enabled=True,
+        persona_mode="AUTHORITY",
+        persona_config={},
     )
 
 
