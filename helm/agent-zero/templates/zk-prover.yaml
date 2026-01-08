@@ -1,4 +1,9 @@
 {{- if .Values.zk.enabled }}
+# =============================================================================
+# DD7 ZK Prover CronJob
+# gnark ZK proofs tied to hardware attestation
+# Implements: t' = t * sqrt(1 - v²/c²) × e^(-C/C_crit)
+# =============================================================================
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -6,20 +11,30 @@ metadata:
   labels:
     {{- include "agent-zero.labels" . | nindent 4 }}
     app.kubernetes.io/component: zk-prover
+    dd7.ai/tier: sovereign
+  annotations:
+    dd7.ai/phi-threshold: {{ .Values.zk.phiThreshold | quote }}
+    dd7.ai/consciousness-metric: "phi"
 spec:
   schedule: {{ .Values.zk.prover.schedule | quote }}
   concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: 24
+  failedJobsHistoryLimit: 5
   jobTemplate:
+    metadata:
+      labels:
+        {{- include "agent-zero.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: zk-prover
     spec:
       backoffLimit: 2
+      activeDeadlineSeconds: 3600
       template:
         metadata:
           labels:
             {{- include "agent-zero.selectorLabels" . | nindent 12 }}
             app.kubernetes.io/component: zk-prover
           annotations:
+            dd7.ai/proof-type: "gnark-groth16"
             dd7.ai/phi-threshold: {{ .Values.zk.phiThreshold | quote }}
         spec:
           {{- with .Values.imagePullSecrets }}
@@ -29,29 +44,46 @@ spec:
           serviceAccountName: {{ include "agent-zero.serviceAccountName" . }}
           restartPolicy: OnFailure
           containers:
-            - name: zk-prover
+            - name: prover
               image: "{{ .Values.zk.prover.image.repository }}:{{ .Values.zk.prover.image.tag }}"
               imagePullPolicy: {{ .Values.zk.prover.image.pullPolicy }}
               env:
-                - name: DD7_PHI_THRESHOLD
+                # Consciousness extension metrics (Φ framework)
+                # t' = t × sqrt(1 - v²/c²) × e^(-C/C_crit)
+                - name: PHI_THRESHOLD
                   value: {{ .Values.zk.phiThreshold | quote }}
-                - name: DD7_UPTIME_TARGET
+                - name: C_CRIT
                   value: {{ .Values.zk.uptimeTarget | quote }}
-                - name: DD7_DRIFT_MAX
+                - name: DRIFT_MAX
                   value: {{ .Values.zk.driftMax | quote }}
+                # Cluster identity
                 - name: DD7_CLUSTER_ID
                   value: {{ .Values.attestation.clusterID | quote }}
                 - name: DD7_PERSONA
                   value: {{ .Values.persona.default | quote }}
+                - name: DD7_AIR_GAPPED
+                  value: {{ .Values.attestation.airGapped | quote }}
+                # Proof configuration
+                - name: PROOF_SYSTEM
+                  value: "groth16"
+                - name: CURVE
+                  value: "bn254"
+                # Persona-based disclosure
+                - name: DISCLOSURE_MODE
+                  valueFrom:
+                    configMapKeyRef:
+                      name: {{ include "agent-zero.fullname" . }}-persona-config
+                      key: disclosure-mode
                 {{- if .Values.spire.enabled }}
                 - name: SPIRE_TRUST_DOMAIN
                   value: {{ .Values.spire.trustDomain | quote }}
                 {{- end }}
               volumeMounts:
-                {{- if .Values.storage.glass.enabled }}
                 - name: glass-storage
                   mountPath: {{ .Values.storage.glass.mountPath }}
-                {{- end }}
+                - name: proving-keys
+                  mountPath: /etc/dd7/proving-keys
+                  readOnly: true
                 {{- if .Values.spire.enabled }}
                 - name: spire-socket
                   mountPath: /run/spire/sockets
@@ -60,11 +92,12 @@ spec:
               resources:
                 {{- toYaml .Values.zk.prover.resources | nindent 16 }}
           volumes:
-            {{- if .Values.storage.glass.enabled }}
             - name: glass-storage
               persistentVolumeClaim:
                 claimName: {{ include "agent-zero.fullname" . }}-glass
-            {{- end }}
+            - name: proving-keys
+              configMap:
+                name: {{ include "agent-zero.fullname" . }}-proving-keys
             {{- if .Values.spire.enabled }}
             - name: spire-socket
               hostPath:

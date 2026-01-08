@@ -1,0 +1,166 @@
+{{- if .Values.spire.enabled }}
+# =============================================================================
+# SPIRE Integration for Workload Identity
+# Trust domain: {{ .Values.spire.trustDomain }}
+# =============================================================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-spire-config
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: spire
+data:
+  trust-domain: {{ .Values.spire.trustDomain | quote }}
+  server-address: {{ .Values.spire.serverAddress | quote }}
+  socket-path: {{ .Values.spire.socketPath | quote }}
+
+  # SPIRE Agent configuration
+  agent.conf: |
+    agent {
+      data_dir = "/run/spire/data"
+      log_level = "INFO"
+      server_address = "{{ .Values.spire.serverAddress }}"
+      socket_path = "{{ .Values.spire.socketPath }}"
+      trust_bundle_path = "/run/spire/bundle/bundle.crt"
+      trust_domain = "{{ .Values.spire.trustDomain }}"
+    }
+
+    plugins {
+      NodeAttestor "k8s_psat" {
+        plugin_data {
+          cluster = "{{ .Values.attestation.clusterID }}"
+        }
+      }
+
+      KeyManager "disk" {
+        plugin_data {
+          directory = "/run/spire/data"
+        }
+      }
+
+      WorkloadAttestor "k8s" {
+        plugin_data {
+          skip_kubelet_verification = true
+        }
+      }
+    }
+
+  # Registration entries for DD7 workloads
+  registration-entries.yaml: |
+    entries:
+      - spiffeID: "spiffe://{{ .Values.spire.trustDomain }}/dd7/attestor"
+        parentID: "spiffe://{{ .Values.spire.trustDomain }}/agent"
+        selectors:
+          - "k8s:pod-label:app.kubernetes.io/component:dd7-attestor"
+        ttl: 3600
+
+      - spiffeID: "spiffe://{{ .Values.spire.trustDomain }}/dd7/zk-prover"
+        parentID: "spiffe://{{ .Values.spire.trustDomain }}/agent"
+        selectors:
+          - "k8s:pod-label:app.kubernetes.io/component:zk-prover"
+        ttl: 3600
+
+      - spiffeID: "spiffe://{{ .Values.spire.trustDomain }}/dd7/verifier"
+        parentID: "spiffe://{{ .Values.spire.trustDomain }}/agent"
+        selectors:
+          - "k8s:pod-label:app.kubernetes.io/component:verifier"
+        ttl: 3600
+
+      - spiffeID: "spiffe://{{ .Values.spire.trustDomain }}/dd7/anchor-eth"
+        parentID: "spiffe://{{ .Values.spire.trustDomain }}/agent"
+        selectors:
+          - "k8s:pod-label:app.kubernetes.io/component:anchor-eth"
+        ttl: 3600
+
+      - spiffeID: "spiffe://{{ .Values.spire.trustDomain }}/dd7/anchor-sol"
+        parentID: "spiffe://{{ .Values.spire.trustDomain }}/agent"
+        selectors:
+          - "k8s:pod-label:app.kubernetes.io/component:anchor-sol"
+        ttl: 3600
+---
+# SPIRE Agent DaemonSet (if not using external SPIRE)
+{{- if not .Values.spire.external }}
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-spire-agent
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: spire-agent
+spec:
+  selector:
+    matchLabels:
+      {{- include "agent-zero.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: spire-agent
+  template:
+    metadata:
+      labels:
+        {{- include "agent-zero.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: spire-agent
+    spec:
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      serviceAccountName: {{ include "agent-zero.serviceAccountName" . }}
+      containers:
+        - name: spire-agent
+          image: ghcr.io/spiffe/spire-agent:1.9.0
+          args:
+            - "-config"
+            - "/run/spire/config/agent.conf"
+          volumeMounts:
+            - name: spire-config
+              mountPath: /run/spire/config
+              readOnly: true
+            - name: spire-bundle
+              mountPath: /run/spire/bundle
+              readOnly: true
+            - name: spire-socket
+              mountPath: /run/spire/sockets
+            - name: spire-data
+              mountPath: /run/spire/data
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 60
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+      volumes:
+        - name: spire-config
+          configMap:
+            name: {{ include "agent-zero.fullname" . }}-spire-config
+        - name: spire-bundle
+          configMap:
+            name: {{ include "agent-zero.fullname" . }}-spire-bundle
+        - name: spire-socket
+          hostPath:
+            path: {{ .Values.spire.socketPath | dir }}
+            type: DirectoryOrCreate
+        - name: spire-data
+          emptyDir: {}
+{{- end }}
+---
+# SPIRE Bundle ConfigMap (placeholder - replace with actual bundle)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-spire-bundle
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: spire
+data:
+  bundle.crt: |
+    # Replace with actual SPIRE bundle certificate
+    # This is a placeholder for the trust bundle
+    -----BEGIN CERTIFICATE-----
+    # SPIRE trust bundle certificate goes here
+    -----END CERTIFICATE-----
+{{- end }}

@@ -224,7 +224,7 @@ zk:
       repository: dd7ai/zk-prover
       tag: "latest"
       pullPolicy: IfNotPresent
-    schedule: "0 * * * *"  # Every hour
+    schedule: "10 * * * *"  # 10 min past every hour
     resources:
       requests:
         cpu: 500m
@@ -284,7 +284,7 @@ anchors:
 # Ledger audit configuration
 ledgerAudit:
   enabled: true
-  schedule: "15 * * * *"  # 15 min past every hour
+  schedule: "45 * * * *"  # 45 min past every hour
   image:
     repository: dd7ai/ledger-audit
     tag: "latest"
@@ -338,6 +338,8 @@ verifier:
 # SPIRE integration for workload identity
 spire:
   enabled: true
+  # Set to true if using an external SPIRE deployment
+  external: false
   trustDomain: "dd7.ai"
   serverAddress: "spire-server.spire:8081"
   socketPath: /run/spire/sockets/agent.sock

@@ -1,4 +1,8 @@
 {{- if .Values.ledgerAudit.enabled }}
+# =============================================================================
+# DD7 Ledger Audit CronJob
+# Integrity verification of the immutable glass storage ledger
+# =============================================================================
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -6,12 +10,17 @@ metadata:
   labels:
     {{- include "agent-zero.labels" . | nindent 4 }}
     app.kubernetes.io/component: ledger-audit
+    dd7.ai/tier: sovereign
 spec:
   schedule: {{ .Values.ledgerAudit.schedule | quote }}
   concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 5
-  failedJobsHistoryLimit: 3
+  successfulJobsHistoryLimit: 24
+  failedJobsHistoryLimit: 5
   jobTemplate:
+    metadata:
+      labels:
+        {{- include "agent-zero.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: ledger-audit
     spec:
       backoffLimit: 2
       template:
@@ -19,6 +28,8 @@ spec:
           labels:
             {{- include "agent-zero.selectorLabels" . | nindent 12 }}
             app.kubernetes.io/component: ledger-audit
+          annotations:
+            dd7.ai/audit-type: "integrity"
         spec:
           {{- with .Values.imagePullSecrets }}
           imagePullSecrets:
@@ -27,49 +38,66 @@ spec:
           serviceAccountName: {{ include "agent-zero.serviceAccountName" . }}
           restartPolicy: OnFailure
           containers:
-            - name: ledger-audit
+            - name: audit
               image: "{{ .Values.ledgerAudit.image.repository }}:{{ .Values.ledgerAudit.image.tag }}"
               imagePullPolicy: {{ .Values.ledgerAudit.image.pullPolicy }}
               env:
+                # Cluster identity
                 - name: DD7_CLUSTER_ID
                   value: {{ .Values.attestation.clusterID | quote }}
                 - name: DD7_PERSONA
                   value: {{ .Values.persona.default | quote }}
-                - name: DD7_PHI_THRESHOLD
+                # Consciousness metrics
+                - name: PHI_THRESHOLD
                   value: {{ .Values.zk.phiThreshold | quote }}
-                - name: DD7_UPTIME_TARGET
+                - name: C_CRIT
                   value: {{ .Values.zk.uptimeTarget | quote }}
+                # Anchor verification
                 {{- if .Values.anchors.ethereum.enabled }}
                 - name: ETH_CONTRACT
                   value: {{ .Values.anchors.ethereum.contract | quote }}
+                - name: VERIFY_ETH_ANCHORS
+                  value: "true"
                 {{- end }}
                 {{- if .Values.anchors.solana.enabled }}
                 - name: SOL_PROGRAM
                   value: {{ .Values.anchors.solana.program | quote }}
+                - name: VERIFY_SOL_ANCHORS
+                  value: "true"
                 {{- end }}
+                # Audit configuration
+                - name: AUDIT_DEPTH
+                  value: "24h"
+                - name: VERIFY_MERKLE_ROOTS
+                  value: "true"
+                - name: VERIFY_ZK_PROOFS
+                  value: "true"
+                - name: VERIFY_ATTESTATIONS
+                  value: "true"
               volumeMounts:
-                {{- if .Values.storage.glass.enabled }}
                 - name: glass-storage
                   mountPath: {{ .Values.storage.glass.mountPath }}
-                {{- end }}
+                  readOnly: true
                 {{- if .Values.persistence.enabled }}
                 - name: data
                   mountPath: {{ .Values.persistence.mountPath }}
                   readOnly: true
                 {{- end }}
+                - name: audit-output
+                  mountPath: /output
               resources:
                 {{- toYaml .Values.ledgerAudit.resources | nindent 16 }}
           volumes:
-            {{- if .Values.storage.glass.enabled }}
             - name: glass-storage
               persistentVolumeClaim:
                 claimName: {{ include "agent-zero.fullname" . }}-glass
-            {{- end }}
             {{- if .Values.persistence.enabled }}
             - name: data
               persistentVolumeClaim:
                 claimName: {{ if .Values.persistence.existingClaim }}{{ .Values.persistence.existingClaim }}{{ else }}{{ include "agent-zero.fullname" . }}-data{{ end }}
             {{- end }}
+            - name: audit-output
+              emptyDir: {}
           {{- with .Values.nodeSelector }}
           nodeSelector:
             {{- toYaml . | nindent 12 }}

@@ -1,0 +1,210 @@
+{{- if .Values.attestation.enabled }}
+# =============================================================================
+# DD7 Configuration Maps
+# Consciousness metrics, persona policies, and attestation config
+# =============================================================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-attestation-config
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: config
+    dd7.ai/config-type: attestation
+data:
+  # Cluster identity
+  cluster-id: {{ .Values.attestation.clusterID | quote }}
+  air-gapped: {{ .Values.attestation.airGapped | quote }}
+
+  # Hardware configuration
+  tpm-enabled: {{ .Values.hardware.tpm.enabled | quote }}
+  tpm-device-path: {{ .Values.hardware.tpm.devicePath | quote }}
+  sgx-enabled: {{ .Values.hardware.sgx.enabled | quote }}
+  sgx-device-path: {{ .Values.hardware.sgx.devicePath | quote }}
+
+  # Consciousness extension metrics (Φ framework)
+  # Formula: t' = t × sqrt(1 - v²/c²) × e^(-C/C_crit)
+  phi-threshold: {{ .Values.zk.phiThreshold | quote }}
+  c-crit: {{ .Values.zk.uptimeTarget | quote }}
+  drift-max: {{ .Values.zk.driftMax | quote }}
+
+  # Attestation policy
+  attestation.yaml: |
+    version: "1.0"
+    cluster:
+      id: {{ .Values.attestation.clusterID }}
+      airGapped: {{ .Values.attestation.airGapped }}
+    hardware:
+      tpm:
+        enabled: {{ .Values.hardware.tpm.enabled }}
+        devicePath: {{ .Values.hardware.tpm.devicePath }}
+      sgx:
+        enabled: {{ .Values.hardware.sgx.enabled }}
+        devicePath: {{ .Values.hardware.sgx.devicePath }}
+    consciousness:
+      phiThreshold: {{ .Values.zk.phiThreshold }}
+      criticalThreshold: {{ .Values.zk.uptimeTarget }}
+      driftMax: {{ .Values.zk.driftMax }}
+    verification:
+      requireTPM: {{ .Values.hardware.tpm.enabled }}
+      requireSGX: {{ .Values.hardware.sgx.enabled }}
+      bindToContainerDigest: true
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-persona-config
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: config
+    dd7.ai/config-type: persona
+data:
+  # Active persona
+  active-persona: {{ .Values.persona.default | quote }}
+
+  # Disclosure mode based on persona
+  {{- if eq .Values.persona.default "STEALTH" }}
+  disclosure-mode: "zk-only"
+  anchor-frequency: {{ .Values.persona.policies.stealth.anchorFrequency | quote }}
+  {{- else if eq .Values.persona.default "AUTHORITY" }}
+  disclosure-mode: "phi-sla"
+  anchor-frequency: {{ .Values.persona.policies.authority.anchorFrequency | quote }}
+  {{- else if eq .Values.persona.default "LAB" }}
+  disclosure-mode: "raw-hash"
+  anchor-frequency: {{ .Values.persona.policies.lab.anchorFrequency | quote }}
+  {{- else }}
+  disclosure-mode: "phi-sla"
+  anchor-frequency: "hourly"
+  {{- end }}
+
+  # Persona definitions
+  personas.yaml: |
+    version: "1.0"
+    default: {{ .Values.persona.default }}
+    policies:
+      STEALTH:
+        anchorFrequency: {{ .Values.persona.policies.stealth.anchorFrequency }}
+        disclosure: {{ .Values.persona.policies.stealth.disclosure }}
+        description: "Minimal footprint, ZK-only proofs"
+      AUTHORITY:
+        anchorFrequency: {{ .Values.persona.policies.authority.anchorFrequency }}
+        disclosure: {{ .Values.persona.policies.authority.disclosure }}
+        description: "Full compliance, PHI-SLA auditing"
+      LAB:
+        anchorFrequency: {{ .Values.persona.policies.lab.anchorFrequency }}
+        disclosure: {{ .Values.persona.policies.lab.disclosure }}
+        description: "Research mode, raw hash disclosure"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-proving-keys
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: config
+    dd7.ai/config-type: proving-keys
+data:
+  # gnark proving system configuration
+  prover-config.yaml: |
+    version: "1.0"
+    proofSystem: "groth16"
+    curve: "bn254"
+
+    # Circuit parameters
+    circuits:
+      attestation:
+        name: "tpm_sgx_attestation"
+        publicInputs:
+          - clusterID
+          - nodeDigest
+          - timestamp
+        privateInputs:
+          - tpmQuote
+          - sgxQuote
+          - containerDigest
+
+      phi_compliance:
+        name: "phi_threshold_proof"
+        publicInputs:
+          - phiThreshold
+          - commitmentHash
+        privateInputs:
+          - phiValue
+          - uptimeMetrics
+          - driftMeasurements
+
+      merkle_batch:
+        name: "merkle_aggregation"
+        publicInputs:
+          - merkleRoot
+          - batchSize
+        privateInputs:
+          - leaves
+          - paths
+
+    # Key management
+    keys:
+      provingKeyPath: "/etc/dd7/proving-keys/pk.bin"
+      verifyingKeyPath: "/etc/dd7/proving-keys/vk.bin"
+      setupTimestamp: "2024-01-01T00:00:00Z"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-contracts-config
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: config
+    dd7.ai/config-type: contracts
+data:
+  # Ethereum anchor contract
+  {{- if .Values.anchors.ethereum.enabled }}
+  eth-contract: {{ .Values.anchors.ethereum.contract | quote }}
+  eth-schedule: {{ .Values.anchors.ethereum.schedule | quote }}
+  {{- end }}
+
+  # Solana anchor program
+  {{- if .Values.anchors.solana.enabled }}
+  sol-program: {{ .Values.anchors.solana.program | quote }}
+  sol-schedule: {{ .Values.anchors.solana.schedule | quote }}
+  {{- end }}
+
+  # Anchor configuration
+  anchors.yaml: |
+    version: "1.0"
+    {{- if .Values.anchors.ethereum.enabled }}
+    ethereum:
+      enabled: true
+      contract: {{ .Values.anchors.ethereum.contract }}
+      schedule: {{ .Values.anchors.ethereum.schedule }}
+      abi: |
+        [
+          {
+            "name": "anchor",
+            "type": "function",
+            "inputs": [
+              {"name": "merkleRoot", "type": "bytes32"},
+              {"name": "timestamp", "type": "uint256"},
+              {"name": "clusterID", "type": "bytes32"}
+            ],
+            "outputs": [{"name": "txHash", "type": "bytes32"}]
+          },
+          {
+            "name": "verify",
+            "type": "function",
+            "inputs": [
+              {"name": "merkleRoot", "type": "bytes32"},
+              {"name": "proof", "type": "bytes"}
+            ],
+            "outputs": [{"name": "valid", "type": "bool"}]
+          }
+        ]
+    {{- end }}
+    {{- if .Values.anchors.solana.enabled }}
+    solana:
+      enabled: true
+      program: {{ .Values.anchors.solana.program }}
+      schedule: {{ .Values.anchors.solana.schedule }}
+    {{- end }}
+{{- end }}

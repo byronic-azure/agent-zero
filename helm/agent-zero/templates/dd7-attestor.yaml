@@ -1,24 +1,38 @@
 {{- if .Values.attestation.enabled }}
+# =============================================================================
+# DD7 TPM + SGX Attestor DaemonSet
+# Sovereign-grade hardware attestation bound to container digest
+# =============================================================================
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: {{ include "agent-zero.fullname" . }}-dd7-attestor
   labels:
     {{- include "agent-zero.labels" . | nindent 4 }}
-    app.kubernetes.io/component: attestor
+    app.kubernetes.io/component: dd7-attestor
+    dd7.ai/tier: sovereign
+  annotations:
+    dd7.ai/phi-threshold: {{ .Values.zk.phiThreshold | quote }}
+    dd7.ai/uptime-target: {{ .Values.zk.uptimeTarget | quote }}
 spec:
   selector:
     matchLabels:
       {{- include "agent-zero.selectorLabels" . | nindent 6 }}
-      app.kubernetes.io/component: attestor
+      app.kubernetes.io/component: dd7-attestor
   template:
     metadata:
       labels:
         {{- include "agent-zero.selectorLabels" . | nindent 8 }}
-        app.kubernetes.io/component: attestor
+        app.kubernetes.io/component: dd7-attestor
+        dd7.ai/attestation: "true"
       annotations:
         dd7.ai/cluster-id: {{ .Values.attestation.clusterID | quote }}
         dd7.ai/air-gapped: {{ .Values.attestation.airGapped | quote }}
+        dd7.ai/persona: {{ .Values.persona.default | quote }}
+        # Consciousness metrics from Φ framework
+        dd7.ai/phi-threshold: {{ .Values.zk.phiThreshold | quote }}
+        dd7.ai/c-crit: {{ .Values.zk.uptimeTarget | quote }}
+        dd7.ai/drift-max: {{ .Values.zk.driftMax | quote }}
     spec:
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
@@ -26,6 +40,7 @@ spec:
       {{- end }}
       serviceAccountName: {{ include "agent-zero.serviceAccountName" . }}
       hostPID: true
+      hostNetwork: false
       containers:
         - name: attestor
           image: "{{ .Values.attestation.image.repository }}:{{ .Values.attestation.image.tag }}"
@@ -36,17 +51,44 @@ spec:
               add:
                 - SYS_ADMIN
                 - SYS_RAWIO
+          ports:
+            - name: attestor
+              containerPort: 9477
+              protocol: TCP
           env:
+            # Cluster identity
             - name: DD7_CLUSTER_ID
               value: {{ .Values.attestation.clusterID | quote }}
             - name: DD7_AIR_GAPPED
               value: {{ .Values.attestation.airGapped | quote }}
             - name: DD7_PERSONA
               value: {{ .Values.persona.default | quote }}
+            # Consciousness extension metrics (Φ framework)
+            - name: PHI_THRESHOLD
+              value: {{ .Values.zk.phiThreshold | quote }}
+            - name: C_CRIT
+              value: {{ .Values.zk.uptimeTarget | quote }}
+            - name: DRIFT_MAX
+              value: {{ .Values.zk.driftMax | quote }}
+            # Node identity
             - name: NODE_NAME
               valueFrom:
                 fieldRef:
                   fieldPath: spec.nodeName
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            # Hardware paths
+            {{- if .Values.hardware.tpm.enabled }}
+            - name: TPM_DEVICE_PATH
+              value: {{ .Values.hardware.tpm.devicePath | quote }}
+            {{- end }}
+            {{- if .Values.hardware.sgx.enabled }}
+            - name: SGX_DEVICE_PATH
+              value: {{ .Values.hardware.sgx.devicePath | quote }}
+            {{- end }}
+            # SPIRE integration
             {{- if .Values.spire.enabled }}
             - name: SPIRE_TRUST_DOMAIN
               value: {{ .Values.spire.trustDomain | quote }}
@@ -61,6 +103,8 @@ spec:
             {{- if .Values.hardware.sgx.enabled }}
             - name: sgx-device
               mountPath: {{ .Values.hardware.sgx.devicePath }}
+            - name: sgx-provision
+              mountPath: /dev/sgx_provision
             {{- end }}
             {{- if .Values.spire.enabled }}
             - name: spire-socket
@@ -71,6 +115,21 @@ spec:
             - name: glass-storage
               mountPath: {{ .Values.storage.glass.mountPath }}
             {{- end }}
+            - name: attestation-config
+              mountPath: /etc/dd7/attestation
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: attestor
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: attestor
+            initialDelaySeconds: 10
+            periodSeconds: 10
           resources:
             requests:
               cpu: 100m
@@ -90,6 +149,10 @@ spec:
           hostPath:
             path: {{ .Values.hardware.sgx.devicePath }}
             type: CharDevice
+        - name: sgx-provision
+          hostPath:
+            path: /dev/sgx_provision
+            type: CharDevice
         {{- end }}
         {{- if .Values.spire.enabled }}
         - name: spire-socket
@@ -102,6 +165,9 @@ spec:
           persistentVolumeClaim:
             claimName: {{ include "agent-zero.fullname" . }}-glass
         {{- end }}
+        - name: attestation-config
+          configMap:
+            name: {{ include "agent-zero.fullname" . }}-attestation-config
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}
