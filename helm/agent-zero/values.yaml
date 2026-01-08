@@ -1,0 +1,177 @@
+# Default values for agent-zero Helm chart
+
+replicaCount: 1
+
+image:
+  repository: agent0ai/agent-zero
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext: {}
+
+securityContext: {}
+
+service:
+  type: ClusterIP
+  port: 80
+  # SSH port for code execution
+  sshPort: 22
+  # Additional ports (9000-9009 for utilities)
+  additionalPorts:
+    - name: util-9000
+      port: 9000
+      targetPort: 9000
+    - name: util-9001
+      port: 9001
+      targetPort: 9001
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+    # kubernetes.io/ingress.class: nginx
+    # kubernetes.io/tls-acme: "true"
+  hosts:
+    - host: agent-zero.local
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+  #  - secretName: agent-zero-tls
+  #    hosts:
+  #      - agent-zero.local
+
+resources: {}
+  # limits:
+  #   cpu: 2000m
+  #   memory: 4Gi
+  # requests:
+  #   cpu: 500m
+  #   memory: 1Gi
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+  # targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# Persistence configuration for Agent Zero data
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  # Existing claim name (optional)
+  existingClaim: ""
+  # Mount path inside the container
+  mountPath: /a0
+
+# Environment variables
+env: {}
+  # OPENAI_API_KEY: ""
+  # ANTHROPIC_API_KEY: ""
+
+# Secrets for sensitive environment variables
+secrets:
+  # Create a secret with API keys
+  create: false
+  # Name of existing secret to use
+  existingSecret: ""
+  # Keys to include in the secret
+  data: {}
+    # OPENAI_API_KEY: ""
+    # ANTHROPIC_API_KEY: ""
+
+# Agent Zero specific configuration
+agentZero:
+  # Web UI host binding
+  webUIHost: "0.0.0.0"
+  # Web UI port (inside container)
+  webUIPort: 80
+
+  # Authentication settings
+  auth:
+    enabled: false
+    login: ""
+    # Password should be set via secrets
+    passwordSecretKey: "AUTH_PASSWORD"
+
+  # Model configuration
+  chatModel:
+    provider: "openrouter"
+    name: "openai/gpt-4.1"
+    contextLength: 100000
+
+  utilModel:
+    provider: "openrouter"
+    name: "openai/gpt-4.1-mini"
+    contextLength: 100000
+
+  embedModel:
+    provider: "huggingface"
+    name: "sentence-transformers/all-MiniLM-L6-v2"
+
+  # Memory settings
+  memory:
+    recallEnabled: true
+    memorizeEnabled: true
+    subdir: "default"
+
+  # MCP Server settings
+  mcpServer:
+    enabled: false
+
+  # A2A Server settings
+  a2aServer:
+    enabled: false
+
+# Probes configuration
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
+
+# Extra volumes
+extraVolumes: []
+
+# Extra volume mounts
+extraVolumeMounts: []
+
+# Init containers
+initContainers: []
+
+# Sidecar containers
+sidecars: []
