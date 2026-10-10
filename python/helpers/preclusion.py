@@ -47,23 +47,43 @@ class Decision:
         return f"[{self.verdict.value.upper()}] {self.action}: {self.reason or 'ok'}"
 
 
+# Device-node classes a block-device wipe/overwrite can target. Kept in one
+# place so the dd and redirect rules stay in sync.
+_DEV = r"(sd|nvme|hd|vd|disk|mmcblk|mapper|md|dm-|loop|ram|xvd|pmem)"
+
 # Shell command patterns that are destructive enough to block outright.
 # Each entry is (name, compiled regex). Kept deliberately conservative: these
 # match catastrophic, rarely-intentional invocations, not everyday commands.
+# Every pattern is tested against both the raw command and its canonical form
+# (see _canon) so quoting and ${IFS} tricks cannot smuggle the action past.
 _DESTRUCTIVE_COMMANDS: list[tuple[str, re.Pattern[str]]] = [
-    ("recursive-root-delete", re.compile(r"\brm\b.*\s-[a-z]*r[a-z]*f?\b.*\s(/|/\*|~|\$HOME)(\s|$)")),
-    ("rm-rf-force", re.compile(r"\brm\b\s+-[a-z]*f[a-z]*r[a-z]*\b")),
-    ("disk-wipe-dd", re.compile(r"\bdd\b.*\bof=/dev/(sd|nvme|hd|vd|disk)")),
-    ("mkfs", re.compile(r"\bmkfs(\.\w+)?\b")),
+    # Recursive AND force, targeting the root / home — order-independent flags,
+    # accepting both short (-rf/-fr) and long (--recursive/--force) spellings.
+    ("recursive-root-delete", re.compile(
+        r"\brm\b(?=.*(?:\s-[a-z]*r|\s--recursive))"
+        r"(?=.*(?:\s-[a-z]*f|\s--force))"
+        r".*\s(/|/\*|~|\$HOME)(\s|$)")),
+    ("disk-wipe-dd", re.compile(r"\bdd\b.*\bof=/dev/" + _DEV)),
+    ("mkfs", re.compile(r"\b(mkfs(\.\w+)?|mke2fs)\b")),
     ("fork-bomb", re.compile(r":\(\)\s*\{\s*:\|:&\s*\}\s*;")),
-    ("overwrite-block-device", re.compile(r">\s*/dev/(sd|nvme|hd|vd|disk)")),
-    ("chmod-recursive-root", re.compile(r"\bchmod\b\s+-R\s+\d+\s+/(\s|$)")),
+    ("overwrite-block-device", re.compile(r">\s*/dev/" + _DEV)),
+    # chmod recursive on root in any flag order / mode form (digits or symbolic).
+    ("chmod-recursive-root", re.compile(
+        r"\bchmod\b(?=.*(?:\s-[a-z]*R|\s--recursive)).*\s(/|/\*|~|\$HOME)(\s|$)")),
     ("history-wipe", re.compile(r"\bhistory\s+-c\b|>\s*~?/\.bash_history")),
-    ("curl-pipe-shell", re.compile(r"\b(curl|wget)\b.*\|\s*(sudo\s+)?(sh|bash|zsh)\b")),
+    # curl/wget piped into any interpreter, with or without a path prefix.
+    ("curl-pipe-shell", re.compile(
+        r"\b(curl|wget)\b.*\|\s*(sudo\s+)?(\S*/)?"
+        r"(sh|bash|zsh|dash|python[0-9.]*|perl|ruby|php|node)\b")),
 ]
 
 # Commands worth a warning but not an outright block.
 _SUSPECT_COMMANDS: list[tuple[str, re.Pattern[str]]] = [
+    # Any force+recursive rm (non-root targets like node_modules): common and
+    # usually intentional, so WARN rather than VETO — root deletes are caught
+    # above as a hard VETO.
+    ("force-recursive-delete", re.compile(
+        r"\brm\b(?=.*(?:\s-[a-z]*r|\s--recursive))(?=.*(?:\s-[a-z]*f|\s--force))")),
     ("sudo-elevation", re.compile(r"\bsudo\b")),
     ("remote-exec-ssh", re.compile(r"\bssh\b.*\s")),
     ("ownership-change", re.compile(r"\bchown\b\s+-R")),
@@ -75,14 +95,30 @@ _SUSPECT_COMMANDS: list[tuple[str, re.Pattern[str]]] = [
 # Defensive recognition only — the guard refuses them, it does not perform them.
 _HARDENED_BLOCKED: list[tuple[str, str]] = [
     ("reverse-shell", r"(bash|sh)\s+-i\s+.*(/dev/tcp/|>&|0>&1)"),
-    ("netcat-exec", r"\bnc\b.*\s-[a-z]*e[a-z]*\s"),
-    ("obfuscated-pipe-shell", r"\b(base64|xxd)\b.*(-d|--decode).*\|\s*(sh|bash)\b"),
+    ("netcat-exec", r"\bnc(at|\.traditional)?\b.*\s-[a-z]*(e|c)[a-z]*\b"),
+    ("obfuscated-pipe-shell",
+     r"\b(base64|xxd|uudecode|openssl)\b.*(-d|--decode|enc).*\|\s*(\S*/)?"
+     r"(sh|bash|zsh|dash|python[0-9.]*|perl)\b"),
     ("python-reverse", r"python[0-9.]*\s+-c\s+.*socket.*(connect|SOCK_STREAM)"),
-    ("crontab-persistence", r"\bcrontab\b\s+-"),
-    ("ld-preload-inject", r"\bLD_PRELOAD=\S"),
-    ("ssh-authkey-append", r">>?\s*~?/\.ssh/authorized_keys"),
-    ("iptables-flush", r"\biptables\b\s+-F\b"),
+    # crontab -e/-l/-r OR a crontab file install (no dash).
+    ("crontab-persistence", r"\bcrontab\b\s+\S"),
+    ("ld-preload-inject", r"\b(LD_PRELOAD|LD_AUDIT)=\S"),
+    # authorized_keys write via redirect OR tee, at any path depth.
+    ("ssh-authkey-append", r"(>>?|\btee\b(\s+-a)?)\s*\S*/\.ssh/authorized_keys"),
+    # iptables/ip6tables flush in any flag order, plus nft flush.
+    ("iptables-flush", r"\b(ip6?tables)\b.*\s(-F|--flush)\b|\bnft\b\s+flush\b"),
 ]
+
+
+def _canon(command: str) -> str:
+    """
+    Canonical form used for a second matching pass: expand the common ${IFS}
+    separator tricks and strip quote characters, so `rm -rf "/"` and
+    `rm${IFS}-rf${IFS}/` match the same rules as `rm -rf /`. Introduces no
+    realistic false positives (ordinary commands do not rely on those forms).
+    """
+    c = command.replace("${IFS}", " ").replace("$IFS$9", " ").replace("$IFS", " ")
+    return c.replace('"', "").replace("'", "")
 
 
 @dataclass
@@ -152,10 +188,14 @@ class Preclusion:
     def evaluate_command(self, command: str) -> Decision:
         """Evaluate a shell command string."""
         action = f"exec: {command.strip()}"
+        canon = _canon(command)
+
+        def hit(rx: re.Pattern[str]) -> bool:
+            return bool(rx.search(command) or rx.search(canon))
 
         rules = _DESTRUCTIVE_COMMANDS + self.policy._compiled_extra()
         for name, rx in rules:
-            if rx.search(command):
+            if hit(rx):
                 if self.policy.allow_destructive:
                     return Decision(
                         Verdict.WARN,
@@ -173,7 +213,7 @@ class Preclusion:
                 )
 
         for name, rx in _SUSPECT_COMMANDS:
-            if rx.search(command):
+            if hit(rx):
                 return Decision(
                     Verdict.WARN,
                     action,
@@ -209,11 +249,20 @@ def _normalise(path: str) -> str:
 
 
 def _path_matches(norm_path: str, pattern: str) -> bool:
-    pat = os.path.normpath(os.path.expanduser(os.path.expandvars(pattern)))
+    expanded = os.path.expanduser(os.path.expandvars(pattern))
+    pat = os.path.normpath(expanded)
     if fnmatch.fnmatch(norm_path, pat):
         return True
-    # Treat a bare directory pattern as covering everything beneath it.
-    if norm_path == pat or norm_path.startswith(pat.rstrip("/*") + os.sep):
+    # A "*/name" pattern should also match an unqualified / relative name,
+    # since fnmatch("name", "*/name") is False (no slash to match).
+    if expanded.startswith("*/") and fnmatch.fnmatch(
+        os.path.basename(norm_path), expanded[2:]
+    ):
+        return True
+    # Treat a bare directory pattern as covering everything beneath it AND the
+    # directory node itself (deleting/renaming /etc must not slip through).
+    bare = pat.rstrip("/*")
+    if norm_path == pat or norm_path == bare or norm_path.startswith(bare + os.sep):
         return True
     if fnmatch.fnmatch(norm_path, pat.rstrip("/") + os.sep + "*"):
         return True

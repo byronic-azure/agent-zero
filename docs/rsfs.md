@@ -63,6 +63,15 @@ block device, `mkfs`, fork bombs, `curl … | sudo bash`, history wipes, …) ar
 Set `allow_destructive=True` to downgrade vetoes to warnings for an explicitly
 authorised operator.
 
+**Bypass-hardened.** Every command rule is matched against both the raw string
+and a canonical form (`_canon()` expands `${IFS}` and strips quotes), and the
+flag matchers are order-independent and accept long options, so evasions like
+`rm -rf "/"`, `rm --recursive --force /`, `rm${IFS}-rf${IFS}/`,
+`dd … of="/dev/sda"`, `curl … | /bin/bash`, `crontab /tmp/cron`,
+`tee -a ~/.ssh/authorized_keys` and `LD_AUDIT=…` are all caught. The path
+matcher also covers unqualified/relative protected names and the protected
+directory node itself. These are regression-tested in `tests/rsfs_test.py`.
+
 ## API examples
 
 ```bash
