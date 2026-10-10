@@ -1,0 +1,387 @@
+{{- if and .Values.spire.enabled (not .Values.spire.external) }}
+# =============================================================================
+# SPIRE Server StatefulSet
+# Trust domain: {{ .Values.spire.trustDomain }}
+# Sovereign workload identity for DD7 infrastructure
+# =============================================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: spire
+  labels:
+    dd7.ai/component: spire
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spire-server
+  namespace: spire
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spire-server-cluster-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spire-server-cluster-role-binding
+subjects:
+  - kind: ServiceAccount
+    name: spire-server
+    namespace: spire
+roleRef:
+  kind: ClusterRole
+  name: spire-server-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-server-config
+  namespace: spire
+data:
+  server.conf: |
+    server {
+      bind_address = "0.0.0.0"
+      bind_port = "8081"
+      socket_path = "/tmp/spire-server/private/api.sock"
+      trust_domain = "{{ .Values.spire.trustDomain }}"
+      data_dir = "/run/spire/data"
+      log_level = "INFO"
+      ca_subject {
+        country = ["US"]
+        organization = ["DD7"]
+        common_name = "DD7 Sovereign CA"
+      }
+      ca_ttl = "168h"
+      default_x509_svid_ttl = "4h"
+      default_jwt_svid_ttl = "1h"
+    }
+
+    plugins {
+      DataStore "sql" {
+        plugin_data {
+          database_type = "sqlite3"
+          connection_string = "/run/spire/data/datastore.sqlite3"
+        }
+      }
+
+      NodeAttestor "k8s_psat" {
+        plugin_data {
+          clusters = {
+            "{{ .Values.attestation.clusterID }}" = {
+              service_account_allow_list = ["spire:spire-agent"]
+            }
+          }
+        }
+      }
+
+      KeyManager "disk" {
+        plugin_data {
+          keys_path = "/run/spire/data/keys.json"
+        }
+      }
+
+      Notifier "k8sbundle" {
+        plugin_data {
+          namespace = "spire"
+          config_map = "spire-bundle"
+        }
+      }
+    }
+
+    health_checks {
+      listener_enabled = true
+      bind_address = "0.0.0.0"
+      bind_port = "8080"
+      live_path = "/live"
+      ready_path = "/ready"
+    }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: spire-server
+  namespace: spire
+  labels:
+    app: spire-server
+    dd7.ai/component: spire
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spire-server
+  serviceName: spire-server
+  template:
+    metadata:
+      labels:
+        app: spire-server
+        dd7.ai/component: spire
+    spec:
+      serviceAccountName: spire-server
+      shareProcessNamespace: true
+      containers:
+        - name: spire-server
+          image: ghcr.io/spiffe/spire-server:1.9.0
+          args:
+            - "-config"
+            - "/run/spire/config/server.conf"
+          ports:
+            - name: grpc
+              containerPort: 8081
+              protocol: TCP
+            - name: health
+              containerPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 60
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          volumeMounts:
+            - name: spire-config
+              mountPath: /run/spire/config
+              readOnly: true
+            - name: spire-data
+              mountPath: /run/spire/data
+            - name: spire-socket
+              mountPath: /tmp/spire-server/private
+        - name: registrar
+          image: ghcr.io/spiffe/k8s-workload-registrar:1.9.0
+          args:
+            - "-config"
+            - "/run/spire/config/registrar.conf"
+          volumeMounts:
+            - name: registrar-config
+              mountPath: /run/spire/config
+              readOnly: true
+            - name: spire-socket
+              mountPath: /tmp/spire-server/private
+              readOnly: true
+      volumes:
+        - name: spire-config
+          configMap:
+            name: spire-server-config
+        - name: registrar-config
+          configMap:
+            name: spire-registrar-config
+        - name: spire-socket
+          emptyDir: {}
+  volumeClaimTemplates:
+    - metadata:
+        name: spire-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spire-server
+  namespace: spire
+spec:
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: 8081
+      targetPort: grpc
+      protocol: TCP
+  selector:
+    app: spire-server
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-registrar-config
+  namespace: spire
+data:
+  registrar.conf: |
+    trust_domain = "{{ .Values.spire.trustDomain }}"
+    server_socket_path = "/tmp/spire-server/private/api.sock"
+    cluster = "{{ .Values.attestation.clusterID }}"
+    mode = "reconcile"
+    pod_label = "dd7.ai/spire-workload"
+    metrics_addr = "0.0.0.0:8082"
+    controller_name = "k8s-workload-registrar"
+    log_level = "info"
+
+    # DD7 workload configurations
+    pod_annotation = "dd7.ai/spiffe-id"
+
+    identity_template = "ns/{{`{{.Pod.Namespace}}`}}/sa/{{`{{.Pod.ServiceAccount}}`}}"
+    identity_template_label = "dd7.ai/spiffe-template"
+---
+# SPIRE Agent ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: spire-agent
+  namespace: spire
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: spire-agent-cluster-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "nodes", "nodes/proxy"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: spire-agent-cluster-role-binding
+subjects:
+  - kind: ServiceAccount
+    name: spire-agent
+    namespace: spire
+roleRef:
+  kind: ClusterRole
+  name: spire-agent-cluster-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: spire-agent-config
+  namespace: spire
+data:
+  agent.conf: |
+    agent {
+      data_dir = "/run/spire/data"
+      log_level = "INFO"
+      server_address = "spire-server"
+      server_port = "8081"
+      socket_path = "{{ .Values.spire.socketPath }}"
+      trust_bundle_path = "/run/spire/bundle/bundle.crt"
+      trust_domain = "{{ .Values.spire.trustDomain }}"
+    }
+
+    plugins {
+      NodeAttestor "k8s_psat" {
+        plugin_data {
+          cluster = "{{ .Values.attestation.clusterID }}"
+        }
+      }
+
+      KeyManager "memory" {
+        plugin_data {}
+      }
+
+      WorkloadAttestor "k8s" {
+        plugin_data {
+          skip_kubelet_verification = true
+        }
+      }
+    }
+
+    health_checks {
+      listener_enabled = true
+      bind_address = "0.0.0.0"
+      bind_port = "8080"
+      live_path = "/live"
+      ready_path = "/ready"
+    }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: spire-agent
+  namespace: spire
+  labels:
+    app: spire-agent
+    dd7.ai/component: spire
+spec:
+  selector:
+    matchLabels:
+      app: spire-agent
+  template:
+    metadata:
+      labels:
+        app: spire-agent
+        dd7.ai/component: spire
+    spec:
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      serviceAccountName: spire-agent
+      initContainers:
+        - name: init-bundle
+          image: ghcr.io/spiffe/spire-agent:1.9.0
+          command:
+            - "/bin/sh"
+            - "-c"
+            - |
+              while ! wget -q -O /run/spire/bundle/bundle.crt http://spire-server.spire:8080/bundle; do
+                echo "Waiting for SPIRE server..."
+                sleep 5
+              done
+          volumeMounts:
+            - name: spire-bundle
+              mountPath: /run/spire/bundle
+      containers:
+        - name: spire-agent
+          image: ghcr.io/spiffe/spire-agent:1.9.0
+          args:
+            - "-config"
+            - "/run/spire/config/agent.conf"
+          ports:
+            - name: health
+              containerPort: 8080
+              hostPort: 8080
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /live
+              port: health
+            initialDelaySeconds: 15
+            periodSeconds: 60
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          volumeMounts:
+            - name: spire-config
+              mountPath: /run/spire/config
+              readOnly: true
+            - name: spire-bundle
+              mountPath: /run/spire/bundle
+            - name: spire-socket
+              mountPath: /run/spire/sockets
+            - name: spire-data
+              mountPath: /run/spire/data
+      volumes:
+        - name: spire-config
+          configMap:
+            name: spire-agent-config
+        - name: spire-bundle
+          emptyDir: {}
+        - name: spire-socket
+          hostPath:
+            path: {{ .Values.spire.socketPath | dir }}
+            type: DirectoryOrCreate
+        - name: spire-data
+          emptyDir: {}
+{{- end }}

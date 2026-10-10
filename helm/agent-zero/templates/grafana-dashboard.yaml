@@ -1,0 +1,283 @@
+{{- if .Values.attestation.enabled }}
+# =============================================================================
+# DD7 Grafana Dashboard ConfigMap
+# Sovereign-grade monitoring for attestation, ZK proofs, and anchors
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-grafana-dashboard
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+    grafana_dashboard: "1"
+  annotations:
+    grafana_folder: "DD7 Sovereign"
+data:
+  dd7-sovereign-dashboard.json: |
+    {
+      "annotations": {
+        "list": [
+          {
+            "datasource": "-- Grafana --",
+            "enable": true,
+            "hide": true,
+            "iconColor": "#6734C3",
+            "name": "Anchor Events",
+            "type": "dashboard"
+          }
+        ]
+      },
+      "title": "DD7 Sovereign Infrastructure",
+      "uid": "dd7-sovereign",
+      "version": 1,
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["dd7", "sovereign", "attestation", "zk"],
+      "templating": {
+        "list": [
+          {
+            "name": "cluster",
+            "type": "constant",
+            "current": {
+              "value": "{{ .Values.attestation.clusterID }}"
+            }
+          },
+          {
+            "name": "persona",
+            "type": "constant",
+            "current": {
+              "value": "{{ .Values.persona.default }}"
+            }
+          }
+        ]
+      },
+      "panels": [
+        {
+          "title": "Φ Consciousness Metric",
+          "type": "gauge",
+          "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "dd7_phi_value{cluster=\"$cluster\"}",
+              "legendFormat": "Φ Value"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "min": 0,
+              "max": 1,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "yellow", "value": 0.5},
+                  {"color": "#6734C3", "value": {{ .Values.zk.phiThreshold }}}
+                ]
+              },
+              "unit": "none",
+              "displayName": "Φ"
+            }
+          },
+          "options": {
+            "showThresholdLabels": true,
+            "showThresholdMarkers": true
+          }
+        },
+        {
+          "title": "Uptime Target (C_crit)",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 0},
+          "targets": [
+            {
+              "expr": "dd7_uptime_ratio{cluster=\"$cluster\"}",
+              "legendFormat": "Uptime"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "percentunit",
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "red", "value": null},
+                  {"color": "#6734C3", "value": {{ .Values.zk.uptimeTarget }}}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "Drift Measurement",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 6, "y": 4},
+          "targets": [
+            {
+              "expr": "dd7_drift_value{cluster=\"$cluster\"}",
+              "legendFormat": "Drift"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "decimals": 10,
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {"color": "#6734C3", "value": null},
+                  {"color": "yellow", "value": {{ .Values.zk.driftMax | float64 | mulf 0.5 }}},
+                  {"color": "red", "value": {{ .Values.zk.driftMax }}}
+                ]
+              }
+            }
+          }
+        },
+        {
+          "title": "TPM Attestations",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "targets": [
+            {
+              "expr": "increase(dd7_tpm_attestations_total{cluster=\"$cluster\"}[1h])",
+              "legendFormat": "{{`{{node}}`}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 20,
+                "gradientMode": "opacity"
+              },
+              "color": {"mode": "palette-classic"}
+            }
+          }
+        },
+        {
+          "title": "ZK Proofs Generated",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+          "targets": [
+            {
+              "expr": "increase(dd7_zk_proofs_total{cluster=\"$cluster\"}[1h])",
+              "legendFormat": "{{`{{proof_type}}`}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 20
+              },
+              "color": {"fixedColor": "#6734C3", "mode": "fixed"}
+            }
+          }
+        },
+        {
+          "title": "Blockchain Anchors",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+          "targets": [
+            {
+              "expr": "increase(dd7_anchor_transactions_total{cluster=\"$cluster\"}[24h])",
+              "legendFormat": "{{`{{chain}}`}}"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "lineWidth": 2,
+                "fillOpacity": 20
+              }
+            }
+          }
+        },
+        {
+          "title": "Merkle Root History",
+          "type": "table",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+          "targets": [
+            {
+              "expr": "dd7_merkle_root{cluster=\"$cluster\"}",
+              "format": "table",
+              "instant": true
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {},
+                "indexByName": {},
+                "renameByName": {
+                  "Time": "Timestamp",
+                  "Value": "Root Hash"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "title": "Evidence Packs Generated",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 12, "y": 16},
+          "targets": [
+            {
+              "expr": "dd7_evidence_packs_total{cluster=\"$cluster\"}",
+              "legendFormat": "Total Packs"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "none",
+              "color": {"fixedColor": "#6734C3", "mode": "fixed"}
+            }
+          }
+        },
+        {
+          "title": "Active Persona",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 18, "y": 16},
+          "targets": [
+            {
+              "expr": "dd7_active_persona{cluster=\"$cluster\"}",
+              "legendFormat": "Persona"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {"type": "value", "options": {"STEALTH": {"text": "🥷 STEALTH"}}},
+                {"type": "value", "options": {"AUTHORITY": {"text": "👑 AUTHORITY"}}},
+                {"type": "value", "options": {"LAB": {"text": "🔬 LAB"}}}
+              ]
+            }
+          }
+        },
+        {
+          "title": "Ledger Audit Status",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 12, "x": 12, "y": 20},
+          "targets": [
+            {
+              "expr": "dd7_ledger_audit_status{cluster=\"$cluster\"}",
+              "legendFormat": "Status"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "mappings": [
+                {"type": "value", "options": {"1": {"text": "✅ VALID", "color": "green"}}},
+                {"type": "value", "options": {"0": {"text": "❌ INVALID", "color": "red"}}}
+              ]
+            }
+          }
+        }
+      ],
+      "time": {
+        "from": "now-24h",
+        "to": "now"
+      },
+      "refresh": "30s"
+    }
+{{- end }}

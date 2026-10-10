@@ -1,0 +1,202 @@
+{{- if .Values.attestation.enabled }}
+# =============================================================================
+# DD7 Prometheus ServiceMonitor
+# Sovereign metrics collection for attestation, ZK proofs, and anchors
+# =============================================================================
+{{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1" }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-dd7
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+    dd7.ai/metrics: "true"
+spec:
+  selector:
+    matchLabels:
+      {{- include "agent-zero.selectorLabels" . | nindent 6 }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 30s
+      scrapeTimeout: 10s
+      honorLabels: true
+      metricRelabelings:
+        - sourceLabels: [__name__]
+          regex: 'dd7_.*'
+          action: keep
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-attestor
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dd7-attestor
+spec:
+  selector:
+    matchLabels:
+      {{- include "agent-zero.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: dd7-attestor
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - port: attestor
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s
+---
+{{- if .Values.verifier.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-verifier
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: verifier
+spec:
+  selector:
+    matchLabels:
+      {{- include "agent-zero.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: verifier
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+  endpoints:
+    - port: https
+      path: /metrics
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
+      interval: 30s
+      scrapeTimeout: 10s
+{{- end }}
+{{- end }}
+---
+# =============================================================================
+# PrometheusRule for DD7 Alerts
+# =============================================================================
+{{- if .Capabilities.APIVersions.Has "monitoring.coreos.com/v1" }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-dd7-alerts
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: monitoring
+    prometheus: k8s
+    role: alert-rules
+spec:
+  groups:
+    - name: dd7.attestation
+      interval: 30s
+      rules:
+        - alert: DD7PhiBelowThreshold
+          expr: dd7_phi_value < {{ .Values.zk.phiThreshold }}
+          for: 5m
+          labels:
+            severity: critical
+            dd7_component: phi
+          annotations:
+            summary: "Φ consciousness metric below threshold"
+            description: "Φ value {{ "{{" }} $value {{ "}}" }} is below threshold {{ .Values.zk.phiThreshold }} for cluster {{ "{{" }} $labels.cluster {{ "}}" }}"
+
+        - alert: DD7UptimeBelowTarget
+          expr: dd7_uptime_ratio < {{ .Values.zk.uptimeTarget }}
+          for: 5m
+          labels:
+            severity: critical
+            dd7_component: uptime
+          annotations:
+            summary: "Uptime below C_crit target"
+            description: "Uptime {{ "{{" }} $value {{ "}}" }} is below target {{ .Values.zk.uptimeTarget }}"
+
+        - alert: DD7DriftExceeded
+          expr: dd7_drift_value > {{ .Values.zk.driftMax }}
+          for: 1m
+          labels:
+            severity: warning
+            dd7_component: drift
+          annotations:
+            summary: "Drift exceeded maximum threshold"
+            description: "Drift {{ "{{" }} $value {{ "}}" }} exceeds max {{ .Values.zk.driftMax }}"
+
+        - alert: DD7AttestationFailure
+          expr: increase(dd7_attestation_failures_total[5m]) > 0
+          for: 1m
+          labels:
+            severity: critical
+            dd7_component: attestation
+          annotations:
+            summary: "TPM/SGX attestation failure detected"
+            description: "Node {{ "{{" }} $labels.node {{ "}}" }} failed attestation"
+
+        - alert: DD7ZKProofFailure
+          expr: increase(dd7_zk_proof_failures_total[1h]) > 0
+          for: 5m
+          labels:
+            severity: warning
+            dd7_component: zk
+          annotations:
+            summary: "ZK proof generation failure"
+            description: "Failed to generate ZK proof for {{ "{{" }} $labels.circuit {{ "}}" }}"
+
+        - alert: DD7AnchorMissed
+          expr: time() - dd7_last_anchor_timestamp > 7200
+          for: 5m
+          labels:
+            severity: warning
+            dd7_component: anchor
+          annotations:
+            summary: "Blockchain anchor overdue"
+            description: "No anchor submitted to {{ "{{" }} $labels.chain {{ "}}" }} in over 2 hours"
+
+        - alert: DD7LedgerAuditFailure
+          expr: dd7_ledger_audit_status == 0
+          for: 1m
+          labels:
+            severity: critical
+            dd7_component: audit
+          annotations:
+            summary: "Ledger audit integrity check failed"
+            description: "Ledger audit detected integrity issues"
+
+    - name: dd7.resources
+      interval: 1m
+      rules:
+        - alert: DD7AttestorNotRunning
+          expr: up{job=~".*dd7-attestor.*"} == 0
+          for: 5m
+          labels:
+            severity: critical
+            dd7_component: attestor
+          annotations:
+            summary: "DD7 Attestor not running"
+            description: "Attestor pod is down on node {{ "{{" }} $labels.node {{ "}}" }}"
+
+        - alert: DD7VerifierNotRunning
+          expr: up{job=~".*verifier.*"} == 0
+          for: 5m
+          labels:
+            severity: warning
+            dd7_component: verifier
+          annotations:
+            summary: "DD7 Verifier not running"
+            description: "Verifier deployment is not healthy"
+
+        - alert: DD7GlassStorageNearFull
+          expr: kubelet_volume_stats_available_bytes{persistentvolumeclaim=~".*glass.*"} / kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~".*glass.*"} < 0.1
+          for: 30m
+          labels:
+            severity: warning
+            dd7_component: storage
+          annotations:
+            summary: "Glass storage nearly full"
+            description: "Glass storage {{ "{{" }} $labels.persistentvolumeclaim {{ "}}" }} is {{ "{{" }} $value | humanizePercentage {{ "}}" }} full"
+{{- end }}
+{{- end }}

@@ -1,0 +1,73 @@
+{{- if .Values.anchors.ethereum.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "agent-zero.fullname" . }}-anchor-eth
+  labels:
+    {{- include "agent-zero.labels" . | nindent 4 }}
+    app.kubernetes.io/component: anchor-eth
+spec:
+  schedule: {{ .Values.anchors.ethereum.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 5
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 3
+      template:
+        metadata:
+          labels:
+            {{- include "agent-zero.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: anchor-eth
+          annotations:
+            dd7.ai/anchor-chain: "ethereum"
+        spec:
+          {{- with .Values.imagePullSecrets }}
+          imagePullSecrets:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          serviceAccountName: {{ include "agent-zero.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          containers:
+            - name: anchor-eth
+              image: "{{ .Values.anchors.ethereum.image.repository }}:{{ .Values.anchors.ethereum.image.tag }}"
+              imagePullPolicy: {{ .Values.anchors.ethereum.image.pullPolicy }}
+              env:
+                - name: DD7_CLUSTER_ID
+                  value: {{ .Values.attestation.clusterID | quote }}
+                - name: DD7_PERSONA
+                  value: {{ .Values.persona.default | quote }}
+                - name: ETH_CONTRACT
+                  value: {{ .Values.anchors.ethereum.contract | quote }}
+                - name: ETH_RPC_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.anchors.ethereum.rpcSecret }}
+                      key: rpc-url
+                - name: ETH_PRIVATE_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.anchors.ethereum.rpcSecret }}
+                      key: private-key
+              volumeMounts:
+                {{- if .Values.storage.glass.enabled }}
+                - name: glass-storage
+                  mountPath: {{ .Values.storage.glass.mountPath }}
+                {{- end }}
+              resources:
+                {{- toYaml .Values.anchors.ethereum.resources | nindent 16 }}
+          volumes:
+            {{- if .Values.storage.glass.enabled }}
+            - name: glass-storage
+              persistentVolumeClaim:
+                claimName: {{ include "agent-zero.fullname" . }}-glass
+            {{- end }}
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.tolerations }}
+          tolerations:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}
