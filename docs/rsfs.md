@@ -19,7 +19,23 @@ filesystem, and it ships no offensive/intrusion capability.
 | RSFS engine | `python/helpers/rsfs.py` | Runs the sentinel swarm in feedback rounds; keeps the integrity chain. |
 | Scan API | `python/api/rsfs_scan.py` → `POST /rsfs_scan` | Run the swarm over drive regions. |
 | Preclude API | `python/api/rsfs_preclude.py` → `POST /rsfs_preclude` | Dry-run policy check on intended actions. |
-| Tests | `tests/rsfs_test.py` | 18 unit tests (stdlib only). |
+| SwarmGuard UI | `webui/rsfs.html` → served at `/rsfs.html` | Deluxe dashboard: scan, alert feed, integrity chain, Preclusion console. |
+| Tests | `tests/rsfs_test.py` | 24 unit tests (stdlib only). |
+
+## SwarmGuard dashboard
+
+Open **`/rsfs.html`** on your running Agent Zero (same origin, so it reuses the
+app's login + CSRF automatically). It gives you:
+
+* a **Swarm Scan** panel — pick watched regions, feedback rounds, optional
+  commands to audit, then "Engage Swarm";
+* a live **alert feed** colour-coded by severity, with the tamper-evident
+  **integrity chain** rendered as `GENESIS → hash → hash → …`;
+* a **Preclusion console** to dry-run any command or path against the hardened
+  policy and see `ALLOW` / `WARN` / `VETO` before anything runs.
+
+The embedded posture is **hardened by default** (`hardened_policy()`), so a
+fresh install is defended out of the box.
 
 ## How the feedback loop works
 

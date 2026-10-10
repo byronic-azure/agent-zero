@@ -26,7 +26,12 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Protocol
 
-from python.helpers.preclusion import Preclusion, Verdict, default_policy
+from python.helpers.preclusion import (
+    Preclusion,
+    Verdict,
+    default_policy,
+    hardened_policy,
+)
 
 
 @dataclass
@@ -311,9 +316,17 @@ class RSFS:
 def build_default_swarm(
     watch_roots: list[str],
     command_source: Callable[[], list[str]] | None = None,
+    hardened: bool = True,
 ) -> RSFS:
-    """Convenience: a standard protective swarm over the given drive regions."""
-    preclusion = Preclusion(default_policy())
+    """
+    Convenience: a protective swarm over the given drive regions.
+
+    hardened=True (the default) wires in the baked-in hardened_policy() so the
+    embedded swarm defends a fresh host out of the box. Pass hardened=False only
+    for a deliberately relaxed posture.
+    """
+    policy = hardened_policy() if hardened else default_policy()
+    preclusion = Preclusion(policy)
     sentinels: list[Sentinel] = [FilesystemSentinel("fs-guard", watch_roots)]
     if command_source is not None:
         sentinels.append(CommandAuditSentinel("cmd-audit", preclusion, command_source))

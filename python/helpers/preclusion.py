@@ -70,6 +70,20 @@ _SUSPECT_COMMANDS: list[tuple[str, re.Pattern[str]]] = [
     ("force-push", re.compile(r"\bgit\b.*\bpush\b.*(--force|-f)\b")),
 ]
 
+# Additional patterns the HARDENED policy blocks outright. These target the
+# classic ways an attacker turns a foothold into persistence or exfiltration.
+# Defensive recognition only — the guard refuses them, it does not perform them.
+_HARDENED_BLOCKED: list[tuple[str, str]] = [
+    ("reverse-shell", r"(bash|sh)\s+-i\s+.*(/dev/tcp/|>&|0>&1)"),
+    ("netcat-exec", r"\bnc\b.*\s-[a-z]*e[a-z]*\s"),
+    ("obfuscated-pipe-shell", r"\b(base64|xxd)\b.*(-d|--decode).*\|\s*(sh|bash)\b"),
+    ("python-reverse", r"python[0-9.]*\s+-c\s+.*socket.*(connect|SOCK_STREAM)"),
+    ("crontab-persistence", r"\bcrontab\b\s+-"),
+    ("ld-preload-inject", r"\bLD_PRELOAD=\S"),
+    ("ssh-authkey-append", r">>?\s*~?/\.ssh/authorized_keys"),
+    ("iptables-flush", r"\biptables\b\s+-F\b"),
+]
+
 
 @dataclass
 class PreclusionPolicy:
@@ -227,3 +241,37 @@ def default_policy() -> PreclusionPolicy:
             "*/id_ed25519",
         ],
     )
+
+
+def hardened_policy() -> PreclusionPolicy:
+    """
+    The baked-in, always-on hardened posture for the embedded swarm.
+
+    A strict superset of default_policy(): it protects more of the host, marks
+    more credential material read-only, and blocks the extra persistence and
+    exfiltration command patterns in _HARDENED_BLOCKED. This is what the
+    embedded swarm ships with so a fresh install is defended by default.
+    """
+    base = default_policy()
+    base.protected_paths += [
+        "/root/*",
+        "/usr/bin/*",
+        "/usr/sbin/*",
+        "/usr/lib/*",
+        "/lib/*",
+        "/var/spool/cron/*",
+        "~/.docker/config.json",
+        "~/.kube/config",
+        "~/.gnupg/*",
+        "*/.git/config",
+    ]
+    base.readonly_paths += [
+        "*/credentials",
+        "*/*.pem",
+        "*/*.key",
+        "*/.npmrc",
+        "*/.pypirc",
+        "*/.netrc",
+    ]
+    base.extra_blocked = list(_HARDENED_BLOCKED)
+    return base
