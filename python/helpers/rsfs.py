@@ -313,6 +313,37 @@ class RSFS:
         }
 
 
+def default_watch_roots() -> list[str]:
+    """
+    Baked-in regions worth guarding on an Agent Zero host: the config, prompts,
+    knowledge, memory, instruments and the agent entrypoint. Resolved against
+    the install's base dir so the embedded swarm has sensible targets with no
+    configuration. Only paths that currently exist are returned.
+    """
+    try:
+        from python.helpers.files import get_abs_path
+        base = get_abs_path
+    except Exception:  # pragma: no cover - fallback when run standalone
+        import os as _os
+
+        here = _os.path.dirname(_os.path.abspath(__file__))
+        root = _os.path.dirname(_os.path.dirname(here))
+        base = lambda *p: _os.path.join(root, *p)  # noqa: E731
+
+    import os as _os
+
+    candidates = [
+        base("conf"),
+        base("prompts"),
+        base("knowledge"),
+        base("memory"),
+        base("instruments"),
+        base("agent.py"),
+        base("initialize.py"),
+    ]
+    return [c for c in candidates if _os.path.exists(c)]
+
+
 def build_default_swarm(
     watch_roots: list[str],
     command_source: Callable[[], list[str]] | None = None,

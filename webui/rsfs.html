@@ -178,9 +178,8 @@
       <h2>Swarm Scan</h2>
       <div class="sub">Loose the sentinel swarm across chosen drive regions. It reads only — never writes.</div>
 
-      <label class="fld">WATCHED REGIONS (one path per line)</label>
-      <textarea id="roots" rows="4">/home/user/agent-zero/conf
-/home/user/agent-zero/prompts</textarea>
+      <label class="fld">WATCHED REGIONS (one path per line — blank = baked-in hardened defaults)</label>
+      <textarea id="roots" rows="4" placeholder="leave blank to guard the baked-in regions:&#10;conf · prompts · knowledge · memory · instruments · agent.py"></textarea>
 
       <label class="fld">FEEDBACK ROUNDS</label>
       <div class="range-row">
@@ -272,8 +271,7 @@ document.getElementById("rounds").addEventListener("input", e => {
 document.getElementById("scanBtn").addEventListener("click", async () => {
   const btn = document.getElementById("scanBtn");
   const out = document.getElementById("scanOut");
-  const roots = lines("roots");
-  if (!roots.length) { out.innerHTML = '<div class="err">Provide at least one watched region.</div>'; return; }
+  const roots = lines("roots");   // empty => server uses baked-in hardened defaults
   btn.disabled = true; const label = btn.textContent;
   btn.innerHTML = '<span class="spin-txt">SWARM CONVERGING</span>';
   out.innerHTML = "";

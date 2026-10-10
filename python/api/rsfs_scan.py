@@ -1,6 +1,6 @@
 from python.helpers.api import ApiHandler, Request, Response
 from python.helpers import errors
-from python.helpers.rsfs import build_default_swarm
+from python.helpers.rsfs import build_default_swarm, default_watch_roots
 
 
 class RsfsScan(ApiHandler):
@@ -24,7 +24,10 @@ class RsfsScan(ApiHandler):
         try:
             roots = input.get("roots") or []
             if not isinstance(roots, list) or not roots:
-                return {"success": False, "error": "provide a non-empty 'roots' list"}
+                # fall back to the baked-in hardened watch regions
+                roots = default_watch_roots()
+            if not roots:
+                return {"success": False, "error": "no watch regions available"}
 
             max_rounds = int(input.get("max_rounds", 4))
             max_rounds = max(1, min(max_rounds, 16))

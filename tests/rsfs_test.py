@@ -17,6 +17,7 @@ from python.helpers.rsfs import (  # noqa: E402
     FilesystemSentinel,
     RSFS,
     build_default_swarm,
+    default_watch_roots,
 )
 
 
@@ -102,6 +103,14 @@ def test_hardened_is_superset_of_default():
     d, h = default_policy(), hardened_policy()
     assert set(d.protected_paths).issubset(set(h.protected_paths))
     assert set(d.readonly_paths).issubset(set(h.readonly_paths))
+
+
+def test_default_watch_roots_exist_and_include_core():
+    roots = default_watch_roots()
+    assert roots, "expected baked-in watch roots to resolve"
+    assert all(os.path.exists(r) for r in roots)
+    assert any(r.endswith("conf") for r in roots)
+    assert any(r.endswith("prompts") for r in roots)
 
 
 def test_default_swarm_is_hardened_by_default(tmp_path):
